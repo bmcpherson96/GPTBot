@@ -720,7 +720,8 @@ class MainWindow(QMainWindow):
                 return
             self.refresh_windows()
             for i in range(self.windows.count()):
-                if self.windows.itemData(i).pid == child.pid:
+                win = self.windows.itemData(i)
+                if win is not None and win.pid == child.pid:
                     self.windows.setCurrentIndex(i)
                     return
             if attempt < 30:

@@ -46,6 +46,52 @@ def open_project(window, task):
     raise AssertionError("Project not in home list")
 
 
+def test_lab_autoselection_skips_placeholder_and_retries_until_child_window_exists(window, monkeypatch):
+    from types import SimpleNamespace
+    from teachdesk import ui
+    from teachdesk.windows import Window
+    callbacks, calls = [], []
+    child = SimpleNamespace(pid=1234, poll=lambda: None)
+    lab = Window(81, child.pid, "C:/fixture/python.exe", "TeachDesk Practice Lab")
+    other = Window(82, 9999, "C:/fixture/other.exe", "Other application")
+    available = [other]
+    window.desktop = SimpleNamespace(windows=lambda: list(available))
+    monkeypatch.setattr(ui.subprocess, "Popen", lambda args: calls.append(args) or child)
+    monkeypatch.setattr(ui.QTimer, "singleShot", lambda delay, callback: callbacks.append(callback))
+    monkeypatch.setattr(window, "safe", lambda action: action())
+    window.open_lab()
+    callbacks.pop(0)()
+    assert window.windows.currentData() is None
+    assert window.windows.itemData(0) is None
+    assert len(callbacks) == 1
+    available.append(lab)
+    callbacks.pop(0)()
+    assert window.windows.currentData() == lab
+    assert window.windows.itemData(0) is None
+    assert calls == [[ui.sys.executable, "-m", "teachdesk.lab"]]
+    assert not callbacks
+    assert window.recorder is None and window.runner is None and not window.armed
+
+
+def test_lab_autoselection_preserves_a_manual_selection_before_callback(window, monkeypatch):
+    from types import SimpleNamespace
+    from teachdesk import ui
+    from teachdesk.windows import Window
+    callbacks = []
+    chosen = Window(82, 9999, "C:/fixture/other.exe", "Chosen application")
+    child = SimpleNamespace(pid=1234, poll=lambda: None)
+    window.desktop = SimpleNamespace(windows=lambda: pytest.fail("Must not refresh after a manual selection"))
+    monkeypatch.setattr(ui.subprocess, "Popen", lambda args: child)
+    monkeypatch.setattr(ui.QTimer, "singleShot", lambda delay, callback: callbacks.append(callback))
+    monkeypatch.setattr(window, "safe", lambda action: action())
+    window.open_lab()
+    window.windows.addItem(chosen.title, chosen)
+    window.windows.setCurrentIndex(window.windows.count()-1)
+    callbacks.pop(0)()
+    assert window.windows.currentData() == chosen
+    assert not callbacks
+
+
 def test_home_is_default_and_open_reuses_saved_project_without_api(window, project, monkeypatch):
     store, task, *_ = project
     monkeypatch.setattr("teachdesk.model.generate", lambda *a: pytest.fail("Opening a project must not call AI"))

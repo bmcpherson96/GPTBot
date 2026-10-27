@@ -10,7 +10,7 @@ if not exist ".venv\Scripts\python.exe" (
     py -3.12 -m venv .venv
     if errorlevel 1 goto failed
 )
-if not exist ".venv\teachdesk-0.2.1.ready" (
+if not exist ".venv\teachdesk-0.2.2.ready" (
     echo Installing TeachDesk requirements. Please wait...
     rem windows-capture requires opencv-python; avoid two packages owning cv2.
     ".venv\Scripts\python.exe" -m pip uninstall -y opencv-python-headless
@@ -19,7 +19,7 @@ if not exist ".venv\teachdesk-0.2.1.ready" (
     if errorlevel 1 goto failed
     ".venv\Scripts\python.exe" -m pip check
     if errorlevel 1 goto failed
-    > ".venv\teachdesk-0.2.1.ready" echo installed
+    > ".venv\teachdesk-0.2.2.ready" echo installed
 )
 echo Starting TeachDesk. Keep this window open while the app runs.
 ".venv\Scripts\python.exe" -m teachdesk.ui

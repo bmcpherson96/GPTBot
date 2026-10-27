@@ -2,7 +2,7 @@
 
 A Windows desktop prototype for explicitly taught, visually verified workflows. It stores demonstrations locally, asks a configured vision model for a structured candidate workflow, and executes a reviewed workflow through the real Windows cursor and keyboard. The product contains no game-specific coordinates, game APIs, browser sessions, shell execution nodes, or hardcoded learned skills.
 
-**Status:** version 0.2.1 retains a project-first interface: **New Project / Open Project → Teach → Review → Practice / Run**. Technical tools live in Settings → Project details. Existing data and the 0.1.3 HWND capture engine are preserved. Learning percentages still come from explicit checks; choosing a percentage cannot mark a task ready. **125 cloud tests pass; seven native Windows checks and real model learning remain pending.** User screenshots verify the first READY and final COMPLETE frames of a 0.1.3 recording, including a pause afterward; they do not establish native input or model competence.
+**Status:** version 0.2.2 retains a project-first interface: **New Project / Open Project → Teach → Review → Practice / Run**. Technical tools live in Settings → Project details. Existing data and the 0.1.3 HWND capture engine are preserved. Learning percentages still come from explicit checks; choosing a percentage cannot mark a task ready. **127 cloud tests pass; seven native Windows checks and real model learning remain pending.** User screenshots verify the first READY and final COMPLETE frames of a 0.1.3 recording, including a pause afterward; they do not establish native input or model competence.
 
 **New here?** Start with the [beginner’s guide](docs/BEGINNERS_GUIDE.md) for a plain-English explanation and a step-by-step installation, teaching and testing walkthrough.
 
@@ -49,6 +49,8 @@ This source adds no external service or paid API requirement. Windows capture re
 The [short beginner guide](docs/BEGINNERS_GUIDE.md) covers these steps. No model/API setup is required just to open projects, teach, or inspect recordings.
 
 Model-proposed boxes can be inaccurate. The candidate validator rejects missing, ambiguous, flat, out-of-bounds, or unsupported evidence crops. You can adjust a graph/box in **Workflow graph / edit**, using the full-resolution local screenshot linked in its timeline tooltip, and save a new candidate. A valid crop is not proof of a correct goal; review and held-out practice remain necessary. No stock “learned Oak task” is installed.
+
+Version 0.2.2 fixes the Practice App launcher trying to read a process ID from the application picker's empty placeholder. It still selects only the launched Lab process, retries while the window opens, and respects a manual application selection. Opening the Lab never starts recording or input.
 
 ## AI reply validation and recovery (0.2.1)
 
