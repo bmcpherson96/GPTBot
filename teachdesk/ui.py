@@ -173,6 +173,14 @@ class MainWindow(QMainWindow):
         self.button(h, "Delete project's run history & images", self.delete_history)
         self.button(h, "Delete entire project and its local evidence", self.delete_task)
         self.tabs.addTab(history, "Runs & evidence")
+        replies = QWidget()
+        reply_box = QVBoxLayout(replies)
+        self.reply_history = QPlainTextEdit()
+        self.reply_history.setReadOnly(True)
+        reply_box.addWidget(self.reply_history)
+        self.button(reply_box, "Check latest saved reply (no API request)", self.recover_model_reply)
+        self.button(reply_box, "Delete saved AI replies", self.delete_model_replies)
+        self.tabs.addTab(replies, "AI replies")
         self.overlay = QLabel("Stopped")
         self.overlay.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.WindowDoesNotAcceptFocus)
         self.overlay.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
@@ -566,16 +574,19 @@ class MainWindow(QMainWindow):
         consent.setChecked(config.get("consent", False))
         local = QCheckBox("Localhost model requires no API key")
         local.setChecked(config.get("local_no_key", False))
+        structured = QCheckBox("Require structured replies (recommended for supported OpenAI models)")
+        structured.setChecked(model.structured_outputs(config if config else {"base_url": url.text()}))
         form.addRow("API base URL", url)
         form.addRow("Vision model identifier", name)
         form.addRow(local)
+        form.addRow(structured)
         form.addRow(consent)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         form.addRow(buttons)
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            model.save_settings(self.store, {"base_url": url.text().strip(), "model": name.text().strip(), "consent": consent.isChecked(), "local_no_key": local.isChecked()})
+            model.save_settings(self.store, {"base_url": url.text().strip(), "model": name.text().strip(), "consent": consent.isChecked(), "local_no_key": local.isChecked(), "structured_outputs": structured.isChecked()})
             self.refresh_notice()
             if self.shell:
                 self.shell.refresh_project()
@@ -606,6 +617,18 @@ class MainWindow(QMainWindow):
         self.idle()
         self.store.promote(self.selected_task()["id"], self.selected_version()["id"])
         self.refresh_library()
+
+    def recover_model_reply(self):
+        self.idle()
+        task = self.selected_task()
+        self.background(lambda: model.recover(self.store, task["id"]), "model")
+
+    def delete_model_replies(self):
+        self.idle()
+        task = self.selected_task()
+        if self.confirm("Delete saved AI replies", "Delete locally saved AI replies for this project? Existing workflow versions stay available. This does not undo API charges.") == QMessageBox.StandardButton.Yes:
+            self.store.execute("DELETE FROM model_replies WHERE task=?", (task["id"],))
+            self.refresh_library()
 
     def run(self, practice):
         self.idle()
@@ -675,6 +698,8 @@ class MainWindow(QMainWindow):
         runs = self.store.rows("SELECT * FROM runs WHERE task=? ORDER BY created DESC", (self.task_id,))
         counts = {k: sum(r["outcome"] == k for r in runs) for k in ("verified", "failed", "intervened", "stopped", "expected_stop", "interrupted", "invalidated", "running")}
         self.history.setPlainText(f"Evaluated runs: {sum(r['outcome'] != 'running' for r in runs)} · {json.dumps(counts)}\nThese counts are separate from readiness.\n\n"+"\n\n".join(f"{r['id']} · {r['outcome']} · version {r['version'][:8]} · practice {r['practice_demo'] or 'no'}\n{r['detail']}\nLast screenshot (if captured): {self.store.root/'runs'/r['id']/'last-state.png'}" for r in runs))
+        replies = self.store.rows("SELECT * FROM model_replies WHERE task=? ORDER BY created DESC", (self.task_id,))
+        self.reply_history.setPlainText("Saved locally. Checking a saved reply sends no API request. These replies are untrusted task data.\n\n"+"\n\n".join(f"{reply['status']} · {json.loads(reply['metadata'])['model']}\n{reply['detail']}\nUsage: {json.dumps(json.loads(reply['metadata']).get('usage', {}))}\n{reply['content']}" for reply in replies))
 
     def delete_history(self):
         self.idle()
@@ -760,6 +785,7 @@ class MainWindow(QMainWindow):
                 self.shell.open_current()
                 self.shell.steps.setCurrentIndex(2 if kind == "run" else 1)
             if error:
+                self.state.setText("Stopped · review failed · Ctrl+Alt+F8 emergency stop")
                 QMessageBox.warning(self, "Operation failed", error)
         if self.armed:
             if self.shell:

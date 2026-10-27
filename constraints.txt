@@ -7,6 +7,10 @@ idna==3.20
 shiboken6==6.12.0
 six==1.17.0
 typing_extensions==4.16.0
+attrs==26.1.0
+jsonschema-specifications==2025.9.1
+referencing==0.37.0
+rpds-py==2026.9.1
 # Development checks
 pytest==9.1.1
 iniconfig==2.3.1

@@ -54,6 +54,10 @@ class Store:
                 outcome TEXT NOT NULL, detail TEXT NOT NULL, created REAL NOT NULL);
               CREATE TABLE IF NOT EXISTS audit (
                 id INTEGER PRIMARY KEY, task TEXT, kind TEXT NOT NULL, detail TEXT NOT NULL, created REAL NOT NULL);
+              CREATE TABLE IF NOT EXISTS model_replies (
+                id TEXT PRIMARY KEY, task TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+                content TEXT NOT NULL, metadata TEXT NOT NULL, status TEXT NOT NULL,
+                detail TEXT NOT NULL, created REAL NOT NULL);
             ''')
             # An interrupted process never converts partial work to success.
             c.execute("UPDATE demos SET status='interrupted' WHERE status='recording'")
@@ -145,6 +149,10 @@ class Store:
             demo = c.execute("SELECT task FROM demos WHERE id=?", (ident,)).fetchone()
             if not demo:
                 return
+            for reply in c.execute("SELECT id,metadata FROM model_replies WHERE task=?", (demo["task"],)).fetchall():
+                provenance = json.loads(reply["metadata"])
+                if ident in provenance.get("sources", []) + provenance.get("answer_sources", []):
+                    c.execute("DELETE FROM model_replies WHERE id=?", (reply["id"],))
             before = {r["id"] for r in c.execute("SELECT id FROM runs WHERE task=?", (demo["task"],))}
             for v in c.execute("SELECT id,workflow FROM versions WHERE task=?", (demo["task"],)).fetchall():
                 if ident in json.loads(v["workflow"])["sources"]:

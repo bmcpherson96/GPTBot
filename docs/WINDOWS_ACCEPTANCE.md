@@ -20,6 +20,10 @@ The harness uses native input to trigger the real registered emergency chord. It
 
 Version 0.2.0 should open on Projects. Open an existing project, verify its saved recording in Review with Beginning/End, navigate to Details and back, and close/reopen with the same library. A new project starts at 0% until checks are satisfied. Confirm Stop stays accessible during the start countdown and recording/running; opening a project must never begin capture, a paid AI request, or desktop input. Teaching a practice example from Practice / Run must store a practice-role recording, not add it to the model evidence. The original detailed controls remain available under Settings → Project details for the checks below.
 
+## Model-format and saved-reply check (0.2.1)
+
+Open the existing project without changing its goal or valid recording. Existing OpenAI settings should default to structured replies. A fresh Learn Project attempt is a new paid request and must show the usual transmission confirmation. Verify the actual endpoint accepts the generated schema and returns a candidate that passes crop/semantic validation. Inspect any rejected text in Details → AI replies; do not call it learned. The reply/usage should remain after restart. Check Saved Reply must make no HTTP request and never auto-promote. Changing an answer, goal or excluded frame must block reuse of the older response. Delete a source/project and verify related replies disappear. Confirm the error dialog's header no longer claims model review is still in progress. Do not reuse key values or full private replies in screenshots.
+
 ## Real learning and control protocol
 
 Record actual results, model identifier and Windows/display settings. Do not mark these passed from unit tests or authored fixture graphs.

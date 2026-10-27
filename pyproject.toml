@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "teachdesk"
-version = "0.2.0"
+version = "0.2.1"
 description = "Local demonstration learning and visible Windows desktop control"
 requires-python = ">=3.12"
 dependencies = [
@@ -12,7 +12,7 @@ dependencies = [
   "opencv-python-headless==5.0.0.93; sys_platform != 'win32'",
   "opencv-python==5.0.0.93; sys_platform == 'win32'",
   "windows-capture==2.0.1; sys_platform == 'win32'",
-  "numpy==2.5.4", "Pillow==13.0.0", "httpx==0.28.1"
+  "numpy==2.5.4", "Pillow==13.0.0", "httpx==0.28.1", "jsonschema==4.26.0"
 ]
 
 [project.scripts]

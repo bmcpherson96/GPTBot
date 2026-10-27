@@ -1,11 +1,11 @@
 # Verification record
 
-Build environment: Linux x86_64, Python 3.12.14. No interactive Windows desktop, no user game, no runtime model key. No paid model requests were made.
+Build environment: Linux x86_64, Python 3.12.14. No interactive Windows desktop, no user game, no runtime model key. No paid model requests were made from the cloud environment.
 
 ## Verified in this environment
 
 - Editable installation from the pinned manifest/constraints in a local virtual environment; `pip check` reports no broken dependencies.
-- Version 0.2.0 core/UI/regression suite: **98 passed, seven native Windows tests skipped**. New UI regressions verify selecting the just-finished recording, opening its timeline and first-frame preview, keeping interrupted recordings visibly interrupted, clearing stale previews when no frame exists, and preserving manual history selection during routine refreshes. The added checks simulate minimizing or covering the target while its foreground handle remains unchanged, focus loss, movement/resizing during capture, physical-pixel context establishment/restoration, last-valid-frame preservation and pausing, execution pausing, and blocking older evidence before transmission. The existing suite covers storage, workflows, readiness, cancellation, model contracts and UI behavior.
+- Version 0.2.1 core/UI/regression suite: **125 passed, seven native Windows tests skipped**. New UI regressions verify selecting the just-finished recording, opening its timeline and first-frame preview, keeping interrupted recordings visibly interrupted, clearing stale previews when no frame exists, and preserving manual history selection during routine refreshes. The added checks simulate minimizing or covering the target while its foreground handle remains unchanged, focus loss, movement/resizing during capture, physical-pixel context establishment/restoration, last-valid-frame preservation and pausing, execution pausing, and blocking older evidence before transmission. The existing suite covers storage, workflows, readiness, cancellation, model contracts and UI behavior.
 - Cancellation tests run a worker and an independent stop caller during movement, text input, key holds and mouse holds. They verify held-state release, worker termination and refusal of subsequent queued input. **The desktop backend is a test double**, so these do not establish native Windows stop latency or driver behavior.
 - The model contract tests exercise the real request/response construction and candidate pipeline using an explicitly mocked HTTP transport. **They do not establish that a real model learned the task.** Production has no mock model fallback, no preloaded skill and no automatic promotion of a model response.
 - Qt UI and separate lab render with the offscreen Qt platform. Their widget interactions and reopen behavior execute in tests. This does not establish Windows capture or input behavior.
@@ -28,12 +28,16 @@ Subsequent 0.1.3 screenshots from the user's Windows PC show recording `402aa9e5
 
 Version 0.2.0 changes presentation and evidence selection, preserving capture-validation version 3 and the existing database. UI tests exercise home/default navigation, New/Open and restart, earned progress and blocked Run, persisted clarification answers without pretending they rewrite a graph, beginning/end previews with excluded frames omitted, archive/restore, training versus held-out routing, accessible Stop, isolation of cancelled countdown callbacks after restarting, and released navigation after an emergency during the countdown, preserved per-run authorization and default duration, small-window/Details navigation, and real branch/inference summaries. A mocked HTTP contract proves legacy screenshots/notes are omitted while current teaching evidence is used and old files remain saved. The new layout was rendered and inspected offscreen; native Windows layout and actual runtime-model generation are still pending. No paid call was made.
 
+The user's first real API attempt on 0.2.0 reached workflow validation and displayed **Invalid input declaration**. This implies a JSON plan response was received, not that it was correct or executable. Input names or description values failed the validator, but the exact reply was not retained in that version, so its precise representation and charge are unknown. No candidate or verified learning result is established by that attempt.
+
+Version 0.2.1 adds strict response schema construction, typed transport arrays, local schema validation and retained replies. Mock-transport regressions verify OpenAI's strict default with old configuration, bound frame/source enums, bad input records retained with one request only, schema-compliant but semantically invalid graphs/crops still rejected, nullable timing defaults, truncated/refused/key-echo replies blocked, token usage sanitized, HTTP error bodies withheld, local revalidation after reopening without a key/API client, changed goals/answers/exclusions/pixels preventing replay, deletion of derived replies, a local-only recovery button, and a current failure banner before its modal dialog. **125 passed, seven native Windows tests skipped**. Strict-schema generation still needs a real OpenAI retry; contract tests are not real model learning. Windows wheels for the new jsonschema/rpds dependencies were downloaded, not executed here.
+
 ## Still unverified / not implemented
 
 | Area | State |
 |---|---|
 | Native Windows capture, physical hooks, SendInput, actual hotkey, DPI/session/scope behavior | Implemented; seven opt-in tests supplied, **not run here**; capture defect observed through 0.1.2; 0.1.3 first/final capture previews observed, full native checks pending |
-| Real model learning, crop quality, clarification quality, actual token cost | Implemented configurable transport; **not exercised with a real credential/model** |
+| Real model learning, crop quality, clarification quality, actual token cost | Implemented configurable transport; **first real 0.2.0 response failed validation; strict-schema retry pending** |
 | Real model-generated lab task at a changed layout | **Pending Windows/model acceptance protocol** |
 | User's game | Unavailable; no compatibility or task competence claim |
 | Broad semantic perception/OCR and autonomous recovery | Not implemented |

@@ -235,6 +235,35 @@ def test_details_are_optional_and_small_window_does_not_force_old_layout_size(wi
     assert window.shell.pages.currentWidget() == window.shell.project
 
 
+def test_model_failure_banner_is_current_before_error_dialog(window, project, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+    open_project(window, project[1])
+    states = []
+    monkeypatch.setattr(QMessageBox, "warning", lambda *args: states.append(window.state.text()))
+    window.worker_busy = True
+    window.state.setText("Stopped · model review in progress")
+    window.messages.put(("model", None, "Rejected plan fixture"))
+    window.poll()
+    assert states and "review failed" in states[0] and "in progress" not in states[0]
+    assert not window.worker_busy
+
+
+def test_saved_reply_button_uses_only_local_recovery(window, project, monkeypatch):
+    from teachdesk import model
+    store, task, _, _, vid, _ = project
+    store.execute("INSERT INTO model_replies VALUES(?,?,?,?,?,?,?)", ("fixture-reply", task, "{}", json.dumps({"model": "fixture"}), "rejected", "Format fixture", time.time()))
+    open_project(window, task)
+    window.shell.steps.setCurrentIndex(1)
+    QApplication.processEvents()
+    assert window.shell.recover_button.isVisible()
+    called = []
+    monkeypatch.setattr(model, "generate", lambda *a: pytest.fail("Saved reply button must not request paid generation"))
+    monkeypatch.setattr(model, "recover", lambda s, t: called.append(t) or vid)
+    monkeypatch.setattr(window, "background", lambda fn, message: fn())
+    window.shell.recover_button.click()
+    assert called == [task]
+
+
 def test_plan_summary_keeps_actual_branch_destinations_and_inferences(project):
     workflow = project[-1]
     workflow["nodes"][0]["basis"] = "inferred"

@@ -213,6 +213,10 @@ class ProjectShell(QWidget):
         self.connect_button = self.c.button(r, "Connect AI in Settings", self.configure_ai)
         self.learn_button = self.c.button(r, "Learn from Recording", self.c.generate)
         self.primary(self.learn_button)
+        self.retry_status = self.label()
+        r.addWidget(self.retry_status)
+        self.recover_button = self.c.button(r, "Check Saved Reply (no API request)", self.c.recover_model_reply)
+        self.reply_details_button = self.c.button(r, "Saved reply details…", lambda: self.show_details(4))
         self.plan = QPlainTextEdit()
         self.plan.setReadOnly(True)
         self.plan.setMinimumHeight(180)
@@ -389,6 +393,12 @@ class ProjectShell(QWidget):
         self._archived = bool(task["archived"])
         self.ai_status.setText("AI connected. Learning uses this project's saved teaching examples, and sends sampled screenshots/actions after confirmation. Practice examples stay separate. API charges may apply." if ai_ready else "AI is not connected yet. You can teach and review recordings now; connect AI in Settings when ready to learn a plan.")
         self.connect_button.setVisible(not ai_ready)
+        replies = self.c.store.rows("SELECT status FROM model_replies WHERE task=? ORDER BY created DESC LIMIT 1", (task["id"],))
+        saved_failure = bool(replies and replies[0]["status"] in {"pending", "rejected"})
+        self.retry_status.setVisible(saved_failure)
+        self.retry_status.setText("The latest AI reply is saved on this PC but has not become a valid plan. Checking it again is local and free of API requests; it may still fail validation. Learning again makes a new API request.")
+        self.recover_button.setVisible(saved_failure)
+        self.reply_details_button.setVisible(bool(replies))
         recorded = self.c.store.rows("SELECT * FROM demos WHERE task=? AND role='train' AND status='complete'", (task["id"],))
         demos = [d for d in recorded if json.loads(d["metadata"]).get("capture_validation") == CAPTURE_VALIDATION_VERSION]
         usable = 1 <= len(demos) <= 8
@@ -421,6 +431,8 @@ class ProjectShell(QWidget):
         self.plan.setVisible(bool(version))
         if task["archived"]:
             next_step = "This project is archived. Restore it to teach or run."
+        elif saved_failure:
+            next_step = "The latest AI reply needs review. Check its saved text locally before making another paid request."+(" Your working version remains available." if self._ready else "")
         elif self._ready:
             next_step = "The working version is ready. This updated plan still needs its own review and practice." if vid != task["active_version"] else "Ready to run within its checked scope. You can still teach more."
         elif not usable:
@@ -464,5 +476,6 @@ class ProjectShell(QWidget):
         self.run_button.setEnabled(allowed and desktop and getattr(self, "_ready", False))
         self.learn_button.setEnabled(allowed and getattr(self, "_ai_ready", False) and getattr(self, "_has_training", False))
         self.save_button.setEnabled(allowed)
+        self.recover_button.setEnabled(allowed)
         self.restore_button.setEnabled(not busy)
         self.promote_button.setEnabled(allowed)

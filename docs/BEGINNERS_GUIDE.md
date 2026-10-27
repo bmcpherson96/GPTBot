@@ -1,6 +1,6 @@
 # TeachDesk: simple beginner guide
 
-Version 0.2.0 opens with **New Project** and **Open Project**. A project has three steps: **Teach**, **Review**, and **Practice / Run**. The detailed tools are under Settings.
+Version 0.2.1 opens with **New Project** and **Open Project**. A project has three steps: **Teach**, **Review**, and **Practice / Run**. The detailed tools are under Settings.
 
 Your existing projects and recordings remain saved. Current window-capture recordings from 0.1.3 carry over; they do not need recording again just because the interface changed. Incompatible older recordings remain local reference and are automatically excluded from AI learning.
 
@@ -9,7 +9,7 @@ Your existing projects and recordings remain saved. Current window-capture recor
 1. Close the previous TeachDesk and its Practice Lab.
 2. Download the latest GitHub source ZIP. Right-click it and choose **Extract All**.
 3. Open the extracted project folder and double-click **Launch TeachDesk.cmd**. Keep its console window open.
-4. Confirm the title says **TeachDesk 0.2.0**.
+4. Confirm the title says **TeachDesk 0.2.1**.
 
 Python 3.12, Windows 10 version 2004 or newer / Windows 11, and one enabled monitor are the starting configuration. Use a standard unlocked desktop. Installation does not need an AI key and does not make paid AI requests.
 
@@ -50,6 +50,17 @@ Stopping automatically opens **Review** with the recording you just finished. Th
 If a question blocks execution, saving an answer is not enough: use **Update Plan from My Answers**, review the regenerated plan, and save that review. The app cannot safely guess what an answer means for its executable graph.
 
 You can postpone AI setup. Teaching, saved recordings, Beginning/End previews and Details remain usable. The app does not substitute a fake learned plan while AI is unavailable. Saving demonstrations does not train model weights.
+
+### If AI learning fails
+
+In 0.2.1, OpenAI uses strict plan-format rules by default; your existing settings and key carry over. A rejected reply does not become a runnable plan. Text replies received by this version are saved locally before validation.
+
+- **Check Saved Reply** makes no API request. It checks the same reply again against the current code and unchanged teaching evidence. It may report the same error; it does not invent a corrected plan.
+- **Learn Project** makes a new API request after confirmation and may charge again. There are no automatic retries.
+- **Saved reply details** opens the original text, status and token counts in Details. Treat the text as untrusted task data. You can delete it there.
+- The old 0.2.0 `Invalid input declaration` attempt was not retained. Updating cannot recover that response. It does preserve your project, recordings and API configuration.
+
+If you change the goal, answers or included evidence after a reply, TeachDesk refuses to reuse it for the changed task. After any plan succeeds, review and separate practice are still required.
 
 ## 3. Practice / Run
 
