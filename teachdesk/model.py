@@ -93,7 +93,7 @@ def prepare_evidence(store, task):
     selected, summaries = [], []
     for demo in demos:
         if demo["metadata"].get("capture_validation") != CAPTURE_VALIDATION_VERSION:
-            raise ValueError("A training recording predates capture validation v2. Delete that recording or use a new task, and record again before model review. No evidence was transmitted.")
+            raise ValueError(f"A training recording predates capture validation v{CAPTURE_VALIDATION_VERSION} (window-only images). Delete that recording or use a new task, and record again before model review. No evidence was transmitted.")
         frames = demo["frames"]
         if not frames:
             raise ValueError("A selected demonstration has no included screenshots")

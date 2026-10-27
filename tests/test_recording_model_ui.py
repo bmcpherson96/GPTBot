@@ -200,7 +200,7 @@ def test_finished_recording_opens_its_own_timeline(project, monkeypatch, has_fra
         window.timeline.selectRow(0)
         assert not window.frame_label.pixmap().isNull()
 
-        finished_demo = store.create_demo(task, {"capture_validation": 2})
+        finished_demo = store.create_demo(task, {"capture_validation": 3})
         store.event(finished_demo, 0, 0, "capture_resumed", {})
         if has_frame:
             store.frame(finished_demo, .1, Image.new("RGB", (80, 60), "red"), {})

@@ -205,7 +205,7 @@ class Runner:
             if self.practice_demo not in practice or self.practice_demo in self.w["sources"]:
                 raise ValueError("Practice requires a separate completed held-out demonstration")
             if practice[self.practice_demo]["metadata"].get("capture_validation") != CAPTURE_VALIDATION_VERSION:
-                raise ValueError("Practice example predates capture validation v2; record it again")
+                raise ValueError(f"Practice example predates capture validation v{CAPTURE_VALIDATION_VERSION}; record it again")
             if practice[self.practice_demo]["metadata"]["window"]["executable"] != self.scope.executable:
                 raise ValueError("Practice evidence belongs to a different application")
         elif self.store.task(self.version["task"])["active_version"] != self.version["id"] or not all(c["passed"] for c in readiness(self.store, self.version)):
@@ -215,7 +215,7 @@ class Runner:
             if source not in demos or demos[source]["metadata"]["window"]["executable"] != self.scope.executable:
                 raise ValueError("Selected window application differs from the training evidence")
             if demos[source]["metadata"].get("capture_validation") != CAPTURE_VALIDATION_VERSION:
-                raise ValueError("Training evidence predates capture validation v2; record a fresh demonstration")
+                raise ValueError(f"Training evidence predates capture validation v{CAPTURE_VALIDATION_VERSION}; record a fresh demonstration")
             source_title = demos[source]["metadata"]["window"].get("title")
             if source_title and self.scope.title != source_title:
                 raise ValueError("Window title differs from the demonstrated scope; teach a separate candidate")

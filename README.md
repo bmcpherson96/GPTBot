@@ -2,15 +2,15 @@
 
 A Windows desktop prototype for explicitly taught, visually verified workflows. It stores demonstrations locally, asks a configured vision model for a structured candidate workflow, and executes a reviewed workflow through the real Windows cursor and keyboard. The product contains no game-specific coordinates, game APIs, browser sessions, shell execution nodes, or hardcoded learned skills.
 
-**Status:** version 0.1.2 automatically opens the recording that just finished, including its first-frame preview. It retains the 0.1.1 capture-transition fix. The original 49 core tests passed on the user's Windows PC, and the UI/Lab launched. A saved frame exposed underlying desktop content during a window transition. The update adds full checks after capture and physical-pixel thread contexts; it still needs a fresh Windows recording check and the native acceptance suite. Model learning remains unverified without a configured runtime model. This is not a claim of end-to-end readiness or universal task competence.
+**Status:** version 0.1.3 replaces desktop-rectangle image acquisition with HWND-bound Windows Graphics Capture. User screenshots showed the 0.1.1/0.1.2 scope checks still admitted wallpaper during a transition, so those recordings are retained but blocked from learning/practice. The controller opens the just-finished recording automatically. **84 core/regression tests pass on Linux; seven native Windows tests and real model learning remain pending.** A fresh Windows recording must verify both READY and COMPLETE and the transition afterward before model review.
 
 **New here?** Start with the [beginner’s guide](docs/BEGINNERS_GUIDE.md) for a plain-English explanation and a step-by-step installation, teaching and testing walkthrough.
 
 ## Run on Windows
 
-Requirements: Windows 10 1703+/11, **64-bit Python 3.12**, an unlocked ordinary user session, one enabled monitor, and a standard, non-elevated application. Keep display scaling unchanged between teaching and practice. Start with the included lab, outside any sensitive application.
+Requirements: Windows 10 2004+/11 (x64 graphics capture support), **64-bit Python 3.12**, an unlocked ordinary user session, one enabled monitor, and a standard, non-elevated application. Keep display scaling unchanged between teaching and practice. Start with the included lab, outside any sensitive application.
 
-**Beginner launch:** after extracting the latest source ZIP, double-click **`Launch TeachDesk.cmd`** in the project folder. It creates/refreshes the local Python environment on its first use, installs the pinned dependencies, and launches the app. Later launches reuse the prepared environment. Keep its console open while TeachDesk runs. This launcher uses ordinary Python commands and does not change PowerShell execution policy. Its native Windows execution is pending verification.
+**Beginner launch:** after extracting the latest source ZIP, double-click **`Launch TeachDesk.cmd`** in the project folder. It creates/refreshes the local Python environment on its first use, installs the pinned dependencies, and launches the app. Later launches reuse the prepared environment. Keep its console open while TeachDesk runs. This launcher uses ordinary Python commands and does not change PowerShell execution policy. CMD startup was observed on Windows for earlier releases; the new graphics capture backend still needs Windows verification.
 
 From this project directory in PowerShell:
 
@@ -23,12 +23,17 @@ If local policy prevents running PowerShell scripts, the equivalent commands are
 
 ```powershell
 py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip uninstall -y opencv-python-headless
 .\.venv\Scripts\python.exe -m pip install -c constraints.txt -e . pytest==9.1.1
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\python.exe -m teachdesk.ui
 ```
 
 There is no packaged Windows executable yet. Installation uses PyPI over verified TLS. Runtime/development dependency versions are pinned in `pyproject.toml` and `constraints.txt`; the build backend is setuptools. No external database or server is needed.
+
+Capture uses the `windows-capture` 2.0.1 Windows x64 wheel, which wraps Microsoft Windows Graphics Capture. Each requested frame uses the exact selected HWND; there is no desktop-image fallback. Its native session stops after that frame (or an error/timeout). The default OS capture border remains enabled. Secondary windows retain Windows' default exclusion. The image size must match physical DWM visible bounds; mismatches pause capture instead of guessing scaling. `mss` is used only to enumerate display geometry. OpenCV uses its regular Windows distribution because the capture wrapper requires it; Linux retains the headless distribution. Setup removes the old headless package from an upgraded Windows environment to avoid competing `cv2` files.
+
+This source adds no external service or paid API requirement. Windows capture requires compatible graphics support; protected/unsupported surfaces or driver failures may give no usable image. Per-frame session startup adds overhead: four frames per second is a best-effort sampling target, not a guaranteed rate. Do not use an older desktop-crop recording for learning; use a new task or remove older demonstrations through the UI and record again.
 
 ## First task: the controlled lab
 
@@ -75,7 +80,7 @@ This first prototype supports **stable visual controls that move in a window at 
 
 Single-monitor coordinates use physical pixels with per-monitor DPI awareness enabled before Qt starts. Positions are searched visually, not replayed. A moved/resized window is supported **between** runs if the visual targets retain their size and all other checks pass; movement/resize during an action pauses. Scaling/display changes require new demonstration/practice. Maximized windows whose extended border falls outside monitor bounds may be rejected; start with an unmaximized lab entirely on screen. Elevated windows (UIPI), UAC/secure desktop, locked/disconnected sessions, other sessions, raw-input games that reject injection, nonstandard keyboard behavior, and fullscreen protected surfaces are unsupported. Do not elevate TeachDesk to work around them.
 
-Capture, window/monitor geometry and mouse-position queries use explicit physical coordinates, including a scoped per-thread DPI context restored after calls. This avoids depending solely on an earlier process-level DPI request succeeding. Demonstrations predating capture validation v2 are kept locally and labeled **re-record after update**. They are blocked from model transmission, practice and readiness; delete the affected demonstration or use a new task and record fresh evidence. The update never deletes prior data automatically.
+Capture, window/monitor geometry and mouse-position queries use explicit physical coordinates, including a scoped per-thread DPI context restored after calls. This avoids depending solely on an earlier process-level DPI request succeeding. Demonstrations predating capture validation v3 (HWND-bound capture) are kept locally and labeled **re-record after update**. They are blocked from model transmission, practice and readiness; delete the affected demonstration or use a new task and record fresh evidence. The update never deletes prior data automatically.
 
 Readiness percentage is the rounded fraction of **six explicit checks**, never a model success probability:
 

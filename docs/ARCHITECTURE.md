@@ -6,7 +6,7 @@ Python 3.12 keeps image/perception/model work close to well-supported libraries.
 |---|---|---|
 | Desktop UI | `teachdesk/ui.py` | Library, review/questions, timeline, candidate editor, authorization, state overlay, worker lifecycle |
 | Recording | `teachdesk/recording.py` | Explicit sessions, monotonic event/frame clock, 4fps frames, 20Hz motion samples, holds, privacy defaults, bounded queues |
-| Desktop adapter | `teachdesk/windows.py` | Physical pixels, single-monitor/session/scope checks, mss capture, physical-only pynput hooks, SendInput, separate OS hotkey thread |
+| Desktop adapter | `teachdesk/windows.py` | Physical pixels, single-monitor/session/scope checks, HWND-bound Windows Graphics Capture (mss only enumerates monitor geometry), physical-only pynput hooks, SendInput, separate OS hotkey thread |
 | Memory | `teachdesk/storage.py` | Transactional local task/demo/event/frame/version/run/audit storage, persistent answers, version promotion, deletion/invalidation |
 | Perception | `teachdesk/perception.py` | Source-evidence cropping, contrast checks, translated template recognition, ambiguity rejection |
 | Model/review | `teachdesk/model.py` | Consent and configuration, selected evidence retrieval by task, answer reuse, real HTTP model request, untrusted JSON validation |
@@ -19,6 +19,12 @@ The workflow is a graph, not an input-event replay. Nodes reference named visual
 Train/practice roles are established before capture. Practice evidence is not sent to the model. Versions are immutable documents; answers/review status are separate. Editing saves a new candidate. Promotion checks readiness in a transaction and retains prior versions. Intent edits, evidence exclusions/deletion and practice deletion invalidate relevant eligibility rather than fabricating a successful learning history. A crash marks in-progress sessions interrupted at the next launch. Qt's lock file prevents competing application instances for one store.
 
 The runtime model is used only to construct candidates. Relevant examples are retrieved by task and role, then sampled at action-adjacent and time-spaced frames, with the selection disclosed. This is structured memory/context reuse, **not** fine-tuning or weight training. There is no vector database or cross-task semantic retrieval yet.
+
+## Window image source (0.1.3)
+
+The 0.1.1/0.1.2 scope guards proved insufficient on the user's Windows PC: a final desktop crop contained wallpaper/controller content before foreground-loss was reported. The source now uses Microsoft Windows Graphics Capture through the pinned `windows-capture` 2.0.1 Windows x64 ABI3 wheel, with `window_hwnd` set and no monitor/title-substring fallback. Each observation starts a one-frame native session, makes an owned RGB copy of the padded BGRA frame, and stops/joins the session in all result paths. It never leaves an idle capture source running. This deliberately trades per-frame setup overhead for bounded session ownership in the prototype. Sampling remains best effort. Foreground/visibility/session/display checks remain before and after acquisition.
+
+Image dimensions must match `DWMWA_EXTENDED_FRAME_BOUNDS`, queried in physical pixels. This excludes the invisible resize margins of `GetWindowRect`; mismatches are rejected rather than rescaled. Cursor capture is disabled so cursor artwork does not contaminate visual templates. The OS capture border remains at its default; secondary-window inclusion also keeps the documented false default. Windows 10 2004+ is required for cursor-capture configuration. Protected or unsupported surfaces/drivers may fail or produce an unusable image; there is no screenshot fallback. Capture validation is now version 3, blocking all previous desktop-crop evidence before model transmission/readiness. No paid service is added.
 
 ## Stages
 
@@ -38,3 +44,10 @@ At build time, direct documentation hosts were inaccessible from the cloud netwo
 - [pynput official FAQ](https://github.com/moses-palmer/pynput/blob/master/docs/faq.rst): Windows event filtering. Returning false filters a listener callback, not the user's OS input; the app never suppresses physical input.
 - [python-mss official project](https://github.com/BoboTiG/python-mss) and [Qt PySide6 metadata](https://pypi.org/project/PySide6/): distribution/API usage. `PySide6-Essentials` supplies the actual QtCore/QtGui/QtWidgets modules used.
 - Current PyPI JSON release metadata for each pinned runtime dependency was checked. Windows x64 wheel availability is checked separately from running those wheels on Windows.
+
+The 0.1.3 change additionally checked the following official references and pinned distribution source:
+
+- [Microsoft CreateForWindow](https://github.com/MicrosoftDocs/sdk-api/blob/docs/sdk-api-src/content/windows.graphics.capture.interop/nf-windows-graphics-capture-interop-igraphicscaptureiteminterop-createforwindow.md): a capture item targets one HWND (Windows 10 1903+).
+- [Microsoft DwmGetWindowAttribute](https://github.com/MicrosoftDocs/sdk-api/blob/docs/sdk-api-src/content/dwmapi/nf-dwmapi-dwmgetwindowattribute.md): HRESULT and physical extended-frame bounds; no DPI-scaled GetWindowRect mapping is used for images.
+- [Microsoft IncludeSecondaryWindows](https://github.com/MicrosoftDocs/winrt-api/blob/docs/windows.graphics.capture/graphicscapturesession_includesecondarywindows.md): defaults to false.
+- [windows-capture Python project](https://github.com/NiiightmareXD/windows-capture/tree/main/windows-capture-python) and [2.0.1 PyPI distribution](https://pypi.org/project/windows-capture/2.0.1/): inspected the actual wheel Python wrapper and release source for `window_hwnd`, BGRA row pitch, callback buffer ownership, stop/join behavior and optional-OS-setting constraints. The wrapper requires `opencv-python`, so that replaces the headless distribution on Windows. The Windows x64 ABI3 wheel and matching pinned OpenCV wheel are available. This inspection is not a native runtime result.

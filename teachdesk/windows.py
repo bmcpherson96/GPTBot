@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import ctypes as C
 import os
+import sys
 import threading
 import time
 from dataclasses import asdict, dataclass
@@ -10,7 +11,7 @@ from ctypes import wintypes as W
 from functools import wraps
 
 
-CAPTURE_VALIDATION_VERSION = 2
+CAPTURE_VALIDATION_VERSION = 3
 
 
 @dataclass(frozen=True)
@@ -63,8 +64,13 @@ class WindowsDesktop:
     def __init__(self):
         if os.name != "nt":
             raise UnsupportedDesktop("Capture and control require an unlocked Windows 10/11 desktop")
+        if sys.getwindowsversion().build < 19041:
+            raise UnsupportedDesktop("Window capture requires Windows 10 version 2004 or newer, or Windows 11")
         self.u = C.WinDLL("user32", use_last_error=True)
         self.k = C.WinDLL("kernel32", use_last_error=True)
+        self.dwm = C.WinDLL("dwmapi", use_last_error=True)
+        self.dwm.DwmGetWindowAttribute.argtypes = [W.HWND, W.DWORD, C.c_void_p, W.DWORD]
+        self.dwm.DwmGetWindowAttribute.restype = C.c_long
         self.u.SetThreadDpiAwarenessContext.argtypes = [C.c_void_p]
         self.u.SetThreadDpiAwarenessContext.restype = C.c_void_p
         self.u.WindowFromPhysicalPoint.argtypes = [W.POINT]
@@ -158,8 +164,12 @@ class WindowsDesktop:
     @physical_pixels
     def geometry(self, hwnd):
         rect = W.RECT()
-        if not self.u.GetWindowRect(hwnd, C.byref(rect)):
-            raise UnsupportedDesktop("Target window no longer exists")
+        # WGC captures the visible DWM frame, excluding GetWindowRect's invisible
+        # resize margins. DWM bounds are physical pixels; never guess a scale.
+        if self.dwm.DwmGetWindowAttribute(hwnd, 9, C.byref(rect), C.sizeof(rect)) != 0:
+            raise UnsupportedDesktop("Cannot read the target's DWM capture bounds")
+        if rect.right <= rect.left or rect.bottom <= rect.top:
+            raise WindowNotReady("Target has no visible capture bounds")
         return {"left": rect.left, "top": rect.top, "width": rect.right-rect.left, "height": rect.bottom-rect.top}
 
     @physical_pixels
@@ -204,17 +214,16 @@ class WindowsDesktop:
 
     @physical_pixels
     def capture(self, scope, display=None, masks=()):
-        from PIL import Image
-        import mss
+        from .window_capture import capture_window
         rect = self.check(scope, display)
-        with mss.mss() as sct:
-            shot = sct.grab(rect)
-            image = Image.frombytes("RGB", shot.size, shot.rgb)
-        # A minimizing window can remain the foreground HWND while the pixels
-        # underneath are exposed. Revalidate all scope conditions before saving.
+        # Bind the image source to HWND. Desktop-rectangle copies exposed other
+        # windows during minimize animations even with matching scope checks.
+        image = capture_window(scope.hwnd, (rect["width"], rect["height"]))
         after = self.check(scope, display)
         if after != rect:
             raise WindowNotReady("Target moved or resized during capture; frame discarded")
+        if image.size != (rect["width"], rect["height"]):
+            raise WindowNotReady("Window image and physical bounds differ; frame discarded")
         # normalized rectangles move with window, remain independent of DPI.
         image = mask_image(image, masks)
         return image, rect

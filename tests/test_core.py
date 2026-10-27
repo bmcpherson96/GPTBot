@@ -220,7 +220,7 @@ def test_branch_coverage_requires_both_heldout_outcomes(project, monkeypatch):
     store.execute("UPDATE versions SET reviewed=1 WHERE id=?", (candidate,))
     assert Runner(store, FakeDesktop(), SCOPE, store.version(candidate), Control(), practice_demo=held).execute(use_hooks=False) == "verified"
     assert not readiness(store, store.version(candidate))[-1]["passed"]
-    new_held = store.create_demo(task, {"window": {"executable": SCOPE.executable}, "display": DISPLAY, "capture_validation": 2}, "practice")
+    new_held = store.create_demo(task, {"window": {"executable": SCOPE.executable}, "display": DISPLAY, "capture_validation": 3}, "practice")
     store.frame(new_held, 0, optional_image, {})
     store.frame(new_held, 1, scene(2, (140, 150)), {})
     store.execute("UPDATE demos SET status='complete' WHERE id=?", (new_held,))
@@ -267,7 +267,7 @@ def test_expected_stop_branch_is_evidence_but_not_a_completion(project, monkeypa
     vid = store.add_version(task, w)
     store.execute("UPDATE versions SET reviewed=1 WHERE id=?", (vid,))
     assert Runner(store, FakeDesktop(), SCOPE, store.version(vid), Control(), practice_demo=held).execute(use_hooks=False) == "verified"
-    stopped = store.create_demo(task, {"window": {"executable": SCOPE.executable}, "display": DISPLAY, "expected_outcome": "expected_stop", "capture_validation": 2}, "practice")
+    stopped = store.create_demo(task, {"window": {"executable": SCOPE.executable}, "display": DISPLAY, "expected_outcome": "expected_stop", "capture_validation": 3}, "practice")
     store.frame(stopped, 0, exception, {})
     store.execute("UPDATE demos SET status='complete' WHERE id=?", (stopped,))
     d = FakeDesktop()

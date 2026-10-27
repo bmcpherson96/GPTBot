@@ -55,16 +55,16 @@ def desktop_capture(monkeypatch, after):
 
     desktop.check = check
 
-    class Capture:
-        def __enter__(self): return self
-        def __exit__(self, *args): pass
-        def grab(self, rect):
-            assert desktop.u.context == PHYSICAL
-            assert rect == RECT
-            image = Image.new("RGB", (rect["width"], rect["height"]), "white")
-            return types.SimpleNamespace(size=image.size, rgb=image.tobytes())
+    def capture_window(hwnd, expected_size):
+        assert hwnd == SCOPE.hwnd
+        assert desktop.u.context == PHYSICAL
+        assert expected_size == (RECT["width"], RECT["height"])
+        return Image.new("RGB", expected_size, "white")
 
-    monkeypatch.setitem(sys.modules, "mss", types.SimpleNamespace(mss=Capture))
+    monkeypatch.setattr("teachdesk.window_capture.capture_window", capture_window)
+    # Even if all Win32 scope checks lag behind an animation, screen pixels
+    # must never become the image source again.
+    monkeypatch.setitem(sys.modules, "mss", types.SimpleNamespace(mss=lambda: pytest.fail("Desktop pixel capture is forbidden")))
     return desktop, checks
 
 
@@ -111,17 +111,18 @@ def test_unavailable_physical_context_blocks_capture():
         must_not_run(subject)
 
 
-def test_window_geometry_is_queried_in_physical_pixels():
+def test_window_geometry_uses_dwm_visible_bounds_in_physical_pixels():
     desktop = object.__new__(WindowsDesktop)
     desktop.u = DpiAPI()
-    def window_rect(hwnd, pointer):
+    def window_rect(hwnd, attribute, pointer, size):
+        assert attribute == 9
         rect = pointer._obj
         if desktop.u.context == PHYSICAL:
             rect.left, rect.top, rect.right, rect.bottom = 300, 150, 600, 350
         else:
             rect.left, rect.top, rect.right, rect.bottom = 200, 100, 400, 233
-        return True
-    desktop.u.GetWindowRect = window_rect
+        return 0
+    desktop.dwm = types.SimpleNamespace(DwmGetWindowAttribute=window_rect)
     assert desktop.geometry(SCOPE.hwnd) == RECT
     assert desktop.u.context == 17
 
@@ -175,7 +176,7 @@ def test_recording_retains_last_valid_frame_when_target_minimizes(tmp_path, monk
     evidence = store.evidence(task)[0]
     assert len(evidence["frames"]) == 1
     assert any(e["kind"] == "capture_paused" for e in evidence["events"])
-    assert evidence["metadata"]["capture_validation"] == 2
+    assert evidence["metadata"]["capture_validation"] == 3
 
 
 def test_execution_pauses_if_window_disappears_during_observation(project):
@@ -252,3 +253,37 @@ def test_old_capture_cannot_be_sent_to_model_or_qualify_for_readiness(project, m
     runner = Runner(store, FakeDesktop(), SCOPE, store.version(vid), Control(), practice_demo=held)
     with pytest.raises(ValueError, match="predates capture validation"):
         runner.preflight()
+
+
+@pytest.mark.parametrize("wrong_size", [(299, 200), (300, 199)])
+def test_window_frame_size_mismatch_is_never_scaled_or_saved(monkeypatch, wrong_size):
+    desktop, _ = desktop_capture(monkeypatch, RECT)
+    monkeypatch.setattr("teachdesk.window_capture.capture_window", lambda *a: Image.new("RGB", wrong_size))
+    with pytest.raises(WindowNotReady, match="bounds differ"):
+        desktop.capture(SCOPE)
+
+
+@pytest.mark.parametrize("bad_bounds,code", [((0, 0, 0, 0), 0), ((10, 10, 5, 5), 0), ((0, 0, 300, 200), -1)])
+def test_unknown_dwm_geometry_blocks_capture(bad_bounds, code):
+    desktop = object.__new__(WindowsDesktop)
+    desktop.u = DpiAPI()
+    def dwm_bounds(hwnd, attribute, pointer, size):
+        pointer._obj.left, pointer._obj.top, pointer._obj.right, pointer._obj.bottom = bad_bounds
+        return code
+    desktop.dwm = types.SimpleNamespace(DwmGetWindowAttribute=dwm_bounds)
+    with pytest.raises(UnsupportedDesktop):
+        desktop.geometry(SCOPE.hwnd)
+
+
+@pytest.mark.parametrize("legacy_validation", [None, 1, 2])
+def test_desktop_crop_generations_are_blocked_before_model_transmission(project, monkeypatch, legacy_validation):
+    store, task, train, _, vid, _ = project
+    metadata = json.loads(store.rows("SELECT metadata FROM demos WHERE id=?", (train,))[0]["metadata"])
+    metadata["capture_validation"] = legacy_validation
+    store.execute("UPDATE demos SET metadata=? WHERE id=?", (json.dumps(metadata), train))
+    monkeypatch.setenv("TEACHDESK_MODEL_KEY", "fixture-key")
+    model.save_settings(store, {"base_url": "https://model.example/v1", "model": "vision", "consent": True, "local_no_key": False})
+    monkeypatch.setattr(model.httpx, "Client", lambda **kw: pytest.fail("Never transmit desktop-crop evidence"))
+    with pytest.raises(ValueError, match="predates capture validation"):
+        model.generate(store, task)
+    assert not readiness(store, store.version(vid))[0]["passed"]

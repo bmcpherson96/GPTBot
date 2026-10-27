@@ -60,7 +60,11 @@ def test_native_capture_and_own_injected_events_filtered(native, tmp_path):
     recorder = Recorder(store, desktop, scope, task)
     recorder.start()
     try:
-        time.sleep(.6)
+        until = time.monotonic()+8
+        while not recorder.finished.is_set() and time.monotonic() < until:
+            if store.rows("SELECT count(*) AS n FROM frames WHERE demo=?", (recorder.demo,))[0]["n"] >= 2:
+                break
+            time.sleep(.05)
         desktop.send(key=16, down=True)
         desktop.send(key=16, down=False)
         time.sleep(.3)
@@ -79,6 +83,57 @@ def test_native_capture_and_own_injected_events_filtered(native, tmp_path):
     light = np.max(np.abs(pixels-np.array([236, 240, 246])), axis=2) <= 2
     band = np.max(np.abs(pixels-np.array([22, 40, 63])), axis=2) <= 2
     assert light.mean() > .55 and band.mean() > .01, "Saved frame is not the expected Lab surface; inspect capture coordinates"
+
+
+def test_native_hwnd_capture_keeps_lab_surface_when_another_window_covers_it(native):
+    """Exercise the actual source independently of potentially delayed scope APIs.
+
+    Product capture still requires foreground ownership. Here only the provider
+    is called, with a known covering window, to prove it cannot crop that window.
+    """
+    from teachdesk.window_capture import capture_window
+    import numpy as np
+    desktop, scope = native
+    rect = desktop.geometry(scope.hwnd)
+    script = """
+import sys
+from PySide6.QtWidgets import QApplication, QWidget
+app = QApplication([])
+w = QWidget()
+w.setWindowTitle('TeachDesk capture-source diagnostic cover')
+w.setStyleSheet('background: #ff00ff;')
+w.setGeometry(*map(int, sys.argv[1:]))
+w.show()
+w.raise_()
+w.activateWindow()
+app.exec()
+"""
+    child = subprocess.Popen([sys.executable, "-c", script, str(rect["left"]-10), str(rect["top"]-10), str(rect["width"]+20), str(rect["height"]+20)])
+    try:
+        until = time.monotonic()+8
+        cover = None
+        while time.monotonic() < until:
+            cover = next((w for w in desktop.windows() if w.pid == child.pid), None)
+            if cover:
+                desktop.u.SetForegroundWindow(cover.hwnd)
+                if desktop.foreground() == cover.hwnd:
+                    break
+            time.sleep(.05)
+        assert cover and desktop.foreground() == cover.hwnd, "Cover window did not gain focus"
+        from ctypes import wintypes as W
+        center = W.POINT(rect["left"]+rect["width"]//2, rect["top"]+rect["height"]//2)
+        hit = desktop.u.WindowFromPhysicalPoint(center)
+        assert int(desktop.u.GetAncestor(hit, 2) or 0) == cover.hwnd
+        image = capture_window(scope.hwnd, (rect["width"], rect["height"]))
+        pixels = np.asarray(image, dtype=np.int16)
+        light = np.max(np.abs(pixels-np.array([236, 240, 246])), axis=2) <= 2
+        band = np.max(np.abs(pixels-np.array([22, 40, 63])), axis=2) <= 2
+        magenta = np.max(np.abs(pixels-np.array([255, 0, 255])), axis=2) <= 2
+        assert light.mean() > .55 and band.mean() > .01 and magenta.mean() < .01
+    finally:
+        child.terminate()
+        child.wait(timeout=5)
+        desktop.u.SetForegroundWindow(scope.hwnd)
 
 
 def test_native_minimized_window_is_not_captured(native):
