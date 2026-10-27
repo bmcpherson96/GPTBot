@@ -434,6 +434,7 @@ class MainWindow(QMainWindow):
             self.overlay.hide()
 
     def show_demo(self):
+        self.frame_label.clear()
         self.timeline.setRowCount(0)
         self.timeline_entries = []
         ident = self.demos.currentData()
@@ -665,10 +666,20 @@ class MainWindow(QMainWindow):
             self.state.setText("Stopped · emergency requested · releasing held input")
         if self.recorder and self.recorder.finished.is_set():
             error = self.recorder.error
+            finished_demo = self.recorder.demo
+            self.task_id = self.store.rows("SELECT task FROM demos WHERE id=?", (finished_demo,))[0]["task"]
             self.recorder = None
             self.overlay.hide()
             self.showNormal()
             self.refresh_library()
+            self.demos.setCurrentIndex(self.demos.findData(finished_demo))
+            self.show_demo()
+            self.tabs.setCurrentIndex(1)
+            for row, entry in enumerate(self.timeline_entries):
+                if entry["kind"] == "frame":
+                    self.timeline.selectRow(row)
+                    self.timeline.scrollToTop()
+                    break
             if error:
                 QMessageBox.warning(self, "Recording interrupted", error)
         while not self.messages.empty():

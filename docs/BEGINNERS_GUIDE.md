@@ -2,7 +2,7 @@
 
 This guide takes you from downloading the project to teaching and testing one small task. Start with the included **Practice Lab**, which is a harmless local application. You do not need your game for these steps.
 
-**Current status:** the original 49 core/UI tests also passed on the user's Windows PC. Version 0.1.1 addresses a window-transition capture defect and passes 65 core/regression tests on Linux; six native Windows tests remain pending. The changed capture path and a real model learning session still need verification on Windows. Your tests are part of validating this prototype, not just installing a finished product.
+**Current status:** the original 49 core/UI tests also passed on the user's Windows PC. Version 0.1.2 also fixes selection of newly saved recordings and passes 68 core/regression tests on Linux; six native Windows tests remain pending. The changed capture path and a real model learning session still need verification on Windows. Your tests are part of validating this prototype, not just installing a finished product.
 
 ## 1. What we built, in plain English
 
@@ -31,7 +31,7 @@ The current runner follows the reviewed graph; it does not continually ask a mod
 
 ## 2. Get the files onto your Windows PC
 
-1. Download the latest TeachDesk source ZIP from the GitHub `teachdesk-prototype` branch linked in the conversation. Version 0.1.1 contains `Launch TeachDesk.cmd`.
+1. Download the latest TeachDesk source ZIP from the GitHub `teachdesk-prototype` branch linked in the conversation. Version 0.1.2 contains `Launch TeachDesk.cmd`.
 2. Right-click it and choose **Extract All**. Do not launch from inside the ZIP.
 3. Open the extracted project folder (GitHub names it `GPTBot-teachdesk-prototype`). You should see `README.md`, `pyproject.toml`, `Launch TeachDesk.cmd`, and the `scripts` and `teachdesk` folders. That is your **project folder**.
 4. Install **64-bit Python 3.12** from [python.org](https://www.python.org/downloads/windows/), including the Python launcher if offered. Other Python versions are not the documented starting configuration.
@@ -48,7 +48,7 @@ For the first test, use Windows 10/11 with **one enabled monitor**, leave scalin
 
 ## 3. Install and open TeachDesk
 
-For the simplest route, **double-click `Launch TeachDesk.cmd`** in your extracted project folder. It prepares the environment on first use and opens the app. No PowerShell commands or activation scripts are needed for this route. Keep the console open. If it reports an error, preserve the output. Check that the app title says **TeachDesk 0.1.1**.
+For the simplest route, **double-click `Launch TeachDesk.cmd`** in your extracted project folder. It prepares the environment on first use and opens the app. No PowerShell commands or activation scripts are needed for this route. Keep the console open. If it reports an error, preserve the output. Check that the app title says **TeachDesk 0.1.2**.
 
 When updating, first close both TeachDesk and its Lab. Extract the new download and open its launcher. Task data lives outside the program folder, so the same Windows account normally sees its existing library. Old recordings are labeled **re-record after update** and cannot be sent to the model. Delete the affected demonstration through the UI, or create a new task and record a clean example. Your previous data is not deleted automatically.
 
@@ -135,7 +135,7 @@ The task you will teach is: select Oak, type `oak`, then finish.
 1. Keep the lab unmaximized, completely on screen, and away from the small top-left status overlay. Click **Reset** in the lab.
 2. In TeachDesk, click **Start Recording / Teach More**.
 3. TeachDesk minimizes. You have **five seconds** to click and focus the lab.
-4. Wait about one second with `READY — choose an item` visible.
+4. Wait until the five-second countdown ends and the status overlay says **Recording**. Then wait one more second with `READY — choose an item` visible. Actions during the countdown are not recorded.
 5. Click **Select Oak**. Wait about one second on `ITEM SELECTED — enter oak`.
 6. Click the item-name field and type `oak`. Wait about one second on `TEXT ACCEPTED — finish task`.
 7. Click **Finish task**. Wait about one second on `COMPLETE — oak stored`.
@@ -147,7 +147,7 @@ Switching away or minimizing the Lab should pause teaching capture and discard a
 
 ### Check what was recorded
 
-Open **Demonstrations & timeline**, choose the recording, and select rows. You should see timestamped input events and corresponding screenshots. The ordinary letters should appear only if you opted into recording them. Key/button releases can include held durations.
+After a recording finishes, TeachDesk automatically opens **Demonstrations & timeline**, selects that recording and previews its first captured frame. This also applies to interrupted recordings; check their status before using them. Use the dropdown to browse older recordings and select rows. You should see timestamped input events and corresponding screenshots. The ordinary letters should appear only if you opted into recording them. Key/button releases can include held durations.
 
 If you made a mistake, either use **Label mistake / irrelevant interval** or delete that demonstration and record a clean one. An interval looks like `2.5,5.0,accidental click`: start seconds, end seconds, explanation. Do this before generating a candidate; changing evidence later invalidates earlier review/practice eligibility.
 
@@ -257,7 +257,7 @@ While paused during an action, complete/correct that step manually, then click *
 | Model HTTP 429 | Check account quota, credit, and rate limits. A retry may incur another charge. |
 | Model rejects images/JSON or produces invalid crops | Confirm model capabilities; review the exact error and source screenshots. This prototype can need a clearer demonstration or candidate repair. |
 | No frames or missing actions | Confirm the lab was selected and foreground during recording, and that the demonstration completed normally. Ordinary text is redacted unless opted in. |
-| A preview shows desktop wallpaper or TeachDesk rather than the Lab | Do not send that evidence to a model. Use version 0.1.1, record a fresh demonstration, and inspect both the first and final frames. If it recurs, retain the error/geometry details and report it; native capture is still under validation. |
+| A preview shows desktop wallpaper or TeachDesk rather than the Lab | Do not send that evidence to a model. Use version 0.1.2, record a fresh demonstration, and inspect both the first and final frames. If it recurs, retain the error/geometry details and report it; native capture is still under validation. |
 | A demonstration says re-record after update | It predates capture validation v2. Delete that demonstration or use a new task, then record again. |
 | Target lost foreground focus | Focus the selected lab during the countdown; do not click TeachDesk during a run unless intentionally intervening. |
 | Target is missing or ambiguous | Reset to the expected state; keep the same scale/theme; remove duplicate-looking targets. Do not reduce verification just to get a pass. |

@@ -173,3 +173,61 @@ def test_ui_library_review_lab_and_reopen(project, monkeypatch):
     assert not lab.oak.isEnabled()
     lab.close()
     reopened.close()
+
+
+@pytest.mark.parametrize("has_frame,error", [(True, None), (True, "Emergency stop"), (False, "No frames captured")])
+def test_finished_recording_opens_its_own_timeline(project, monkeypatch, has_frame, error):
+    import threading
+    from types import SimpleNamespace
+    from PIL import Image
+    from PySide6.QtWidgets import QApplication, QMessageBox
+    from teachdesk.ui import MainWindow
+
+    if os.name != "nt":
+        monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    class Unavailable:
+        def __init__(self): raise RuntimeError("Desktop disabled for UI regression test")
+    monkeypatch.setattr("teachdesk.ui.WindowsDesktop", Unavailable)
+    warnings = []
+    monkeypatch.setattr(QMessageBox, "warning", lambda *args: warnings.append(args[2]))
+    store, task, old_demo, *_ = project
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow(store)
+    try:
+        window.task_id = task
+        window.refresh_library()
+        window.demos.setCurrentIndex(window.demos.findData(old_demo))
+        window.timeline.selectRow(0)
+        assert not window.frame_label.pixmap().isNull()
+
+        finished_demo = store.create_demo(task, {"capture_validation": 2})
+        store.event(finished_demo, 0, 0, "capture_resumed", {})
+        if has_frame:
+            store.frame(finished_demo, .1, Image.new("RGB", (80, 60), "red"), {})
+        store.execute("UPDATE demos SET status=? WHERE id=?", ("interrupted" if error else "complete", finished_demo))
+        finished = threading.Event()
+        finished.set()
+        window.recorder = SimpleNamespace(finished=finished, error=error, demo=finished_demo)
+        # Even if the user browsed a different task while teaching, show the
+        # recording that actually finished, rather than that task's latest one.
+        window.task_id = store.create_task("Other task", "Unrelated")
+        window.refresh_library()
+        window.tabs.setCurrentIndex(0)
+        window.poll()
+
+        assert window.recorder is None
+        assert window.task_id == task
+        assert window.demos.currentData() == finished_demo
+        assert window.tabs.currentIndex() == 1
+        assert warnings == ([error] if error else [])
+        if has_frame:
+            assert window.timeline_entries[window.timeline.currentRow()]["kind"] == "frame"
+            assert window.frame_label.pixmap().toImage().pixelColor(0, 0).name() == "#ff0000"
+        else:
+            assert window.frame_label.pixmap().isNull()
+        # Routine refreshes still preserve a deliberately selected older demo.
+        window.demos.setCurrentIndex(window.demos.findData(old_demo))
+        window.refresh_library()
+        assert window.demos.currentData() == old_demo
+    finally:
+        window.close()

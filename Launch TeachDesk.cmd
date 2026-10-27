@@ -7,13 +7,13 @@ if not exist ".venv\Scripts\python.exe" (
     py -3.12 -m venv .venv
     if errorlevel 1 goto failed
 )
-if not exist ".venv\teachdesk-0.1.1.ready" (
+if not exist ".venv\teachdesk-0.1.2.ready" (
     echo Installing TeachDesk requirements. Please wait...
     ".venv\Scripts\python.exe" -m pip install -c constraints.txt -e . pytest==9.1.1
     if errorlevel 1 goto failed
     ".venv\Scripts\python.exe" -m pip check
     if errorlevel 1 goto failed
-    > ".venv\teachdesk-0.1.1.ready" echo installed
+    > ".venv\teachdesk-0.1.2.ready" echo installed
 )
 echo Starting TeachDesk. Keep this window open while the app runs.
 ".venv\Scripts\python.exe" -m teachdesk.ui
