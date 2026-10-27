@@ -85,15 +85,18 @@ def availability(store):
 
 
 def prepare_evidence(store, task):
-    demos = store.evidence(task)
-    if not demos:
+    recorded = store.evidence(task)
+    if not recorded:
         raise ValueError("Record at least one complete training demonstration first")
+    # Keep older recordings as local history. Their pixels must never be sent
+    # to the model, and they need not force deletion when fresh evidence exists.
+    demos = [demo for demo in recorded if demo["metadata"].get("capture_validation") == CAPTURE_VALIDATION_VERSION]
+    if not demos:
+        raise ValueError(f"The teaching evidence predates capture validation v{CAPTURE_VALIDATION_VERSION}. Record a fresh example before model review. Older recordings stay local; no evidence was transmitted.")
     if len(demos) > 8:
         raise ValueError("Prototype context supports up to eight training demonstrations; archive/delete irrelevant examples first")
     selected, summaries = [], []
     for demo in demos:
-        if demo["metadata"].get("capture_validation") != CAPTURE_VALIDATION_VERSION:
-            raise ValueError(f"A training recording predates capture validation v{CAPTURE_VALIDATION_VERSION} (window-only images). Delete that recording or use a new task, and record again before model review. No evidence was transmitted.")
         frames = demo["frames"]
         if not frames:
             raise ValueError("A selected demonstration has no included screenshots")

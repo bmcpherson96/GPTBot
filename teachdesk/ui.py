@@ -30,11 +30,18 @@ class MainWindow(QMainWindow):
     def __init__(self, store):
         super().__init__()
         self.store = store
-        self.setWindowTitle(f"TeachDesk {__version__} · demonstration workspace")
-        self.resize(1360, 920)
+        self.setWindowTitle(f"TeachDesk {__version__} · Projects")
+        screen = QApplication.primaryScreen().availableGeometry()
+        self.resize(min(1100, screen.width()-40), min(780, screen.height()-40))
+        self.setMinimumSize(640, 480)
+        font = self.font()
+        font.setPointSize(11)
+        self.setFont(font)
+        self.shell = None
         self.task_id = None
         self.recorder = self.runner = self.control = None
         self.armed = False
+        self.arm_generation = 0
         self.worker_busy = False
         self.messages = queue.Queue()
         self.emergency = threading.Event()
@@ -53,7 +60,7 @@ class MainWindow(QMainWindow):
         self.state = QLabel("Stopped · Emergency stop: Ctrl+Alt+F8")
         self.state.setStyleSheet("font-size:18px;font-weight:bold;padding:10px;background:#243d55;color:white")
         header.addWidget(self.state, 1)
-        for text, fn in (("Create Task", self.create_task), ("Model configuration", self.configure_model), ("Launch Practice Lab", self.open_lab)):
+        for text, fn in (("New Project", self.create_task), ("AI connection", self.configure_model), ("Practice App", self.open_lab)):
             self.button(header, text, fn)
         layout.addLayout(header)
         self.notice = QLabel()
@@ -62,14 +69,14 @@ class MainWindow(QMainWindow):
         split = QSplitter()
         layout.addWidget(split, 1)
         self.library = QTreeWidget()
-        self.library.setHeaderLabels(["Task library", "Checks"])
+        self.library.setHeaderLabels(["Projects", "Checks"])
         self.library.itemSelectionChanged.connect(self.choose_task)
         split.addWidget(self.library)
         right = QWidget()
         box = QVBoxLayout(right)
         split.addWidget(right)
         split.setSizes([310, 1000])
-        self.title = QLabel("Create a task to begin")
+        self.title = QLabel("Open or create a project")
         self.title.setStyleSheet("font-size:20px;font-weight:bold")
         box.addWidget(self.title)
         versions = QHBoxLayout()
@@ -78,7 +85,7 @@ class MainWindow(QMainWindow):
         self.versions.currentIndexChanged.connect(self.show_version)
         versions.addWidget(self.versions, 1)
         self.button(versions, "Promote / Restore Version", self.promote)
-        self.button(versions, "Edit Task", self.edit_task)
+        self.button(versions, "Edit Project", self.edit_task)
         self.button(versions, "Archive / Unarchive", self.archive)
         box.addLayout(versions)
         self.progress = QProgressBar()
@@ -163,8 +170,8 @@ class MainWindow(QMainWindow):
         self.history = QPlainTextEdit()
         self.history.setReadOnly(True)
         h.addWidget(self.history)
-        self.button(h, "Delete selected task's run history & images", self.delete_history)
-        self.button(h, "Delete entire task and its local evidence", self.delete_task)
+        self.button(h, "Delete project's run history & images", self.delete_history)
+        self.button(h, "Delete entire project and its local evidence", self.delete_task)
         self.tabs.addTab(history, "Runs & evidence")
         self.overlay = QLabel("Stopped")
         self.overlay.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.WindowDoesNotAcceptFocus)
@@ -174,6 +181,10 @@ class MainWindow(QMainWindow):
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.poll)
         self.timer.start(100)
+        from .project_ui import ProjectShell
+        workspace = self.takeCentralWidget()
+        self.shell = ProjectShell(self, workspace)
+        self.setCentralWidget(self.shell)
         self.refresh_windows()
         self.refresh_library()
         self.refresh_notice()
@@ -208,7 +219,7 @@ class MainWindow(QMainWindow):
 
     def selected_task(self):
         if not self.task_id:
-            raise ValueError("Select or create a task")
+            raise ValueError("Open or create a project first")
         return self.store.task(self.task_id)
 
     def selected_version(self):
@@ -225,9 +236,11 @@ class MainWindow(QMainWindow):
     def refresh_windows(self):
         old = self.windows.currentData()
         self.windows.clear()
+        self.windows.addItem("Choose an application…", None)
         if self.desktop:
             for win in self.desktop.windows():
-                self.windows.addItem(f"{win.title} · {Path(win.executable).name} · PID {win.pid}", win)
+                self.windows.addItem(win.title, win)
+                self.windows.setItemData(self.windows.count()-1, f"{win.executable} · PID {win.pid}", Qt.ItemDataRole.ToolTipRole)
             for i in range(self.windows.count()):
                 if self.windows.itemData(i) == old:
                     self.windows.setCurrentIndex(i)
@@ -251,6 +264,8 @@ class MainWindow(QMainWindow):
         self.library.expandAll()
         self.library.blockSignals(False)
         self.load_task()
+        if self.shell:
+            self.shell.refresh_home()
 
     def choose_task(self):
         item = self.library.currentItem()
@@ -260,6 +275,8 @@ class MainWindow(QMainWindow):
 
     def load_task(self):
         if not self.task_id:
+            if self.shell:
+                self.shell.refresh_project()
             return
         task = self.selected_task()
         self.title.setText(task["name"])
@@ -275,14 +292,16 @@ class MainWindow(QMainWindow):
         old_demo = self.demos.currentData()
         self.demos.clear()
         for d in self.store.rows("SELECT * FROM demos WHERE task=? ORDER BY created DESC", (self.task_id,)):
-            legacy = " · re-record after update" if json.loads(d["metadata"]).get("capture_validation") != CAPTURE_VALIDATION_VERSION else ""
-            self.demos.addItem(f"{d['id'][:8]} · {d['role']} · {d['status']}"+legacy, d["id"])
+            from .project_ui import recording_name
+            self.demos.addItem(recording_name(d), d["id"])
         idx = self.demos.findData(old_demo)
         self.demos.setCurrentIndex(max(0, idx))
         self.demos.blockSignals(False)
         self.show_demo()
         self.show_version()
         self.show_history()
+        if self.shell:
+            self.shell.refresh_project()
 
     def show_version(self):
         while self.question_form.rowCount():
@@ -302,6 +321,8 @@ class MainWindow(QMainWindow):
             self.checks.setText("Blocked: no workflow candidate")
             self.progress.setValue(0)
             self.reviewed.setChecked(False)
+            if self.shell:
+                self.shell.refresh_project()
             return
         v = self.selected_version()
         w = v["workflow"]
@@ -319,24 +340,29 @@ class MainWindow(QMainWindow):
             self.question_form.addRow(label, answer)
             self.answer_widgets[q["id"]] = answer
         self.reviewed.setChecked(bool(v["reviewed"]))
+        if self.shell:
+            self.shell.refresh_project()
 
     def create_task(self):
         self.idle()
-        name, ok = QInputDialog.getText(self, "Create Task", "Name")
+        name, ok = QInputDialog.getText(self, "New Project", "What would you like to call this project?")
         if not ok:
             return
-        goal, ok = QInputDialog.getMultiLineText(self, "Create Task", "Describe the goal, supported app, completion and any prohibited actions")
+        goal, ok = QInputDialog.getMultiLineText(self, "New Project", "What should it do, in which app, and how will you know it is finished? Include anything it must not do.")
         if ok:
             self.task_id = self.store.create_task(name, goal)
             self.refresh_library()
+            if self.shell:
+                self.shell.open_current()
+                self.shell.steps.setCurrentIndex(0)
 
     def edit_task(self):
         self.idle()
         task = self.selected_task()
-        name, ok = QInputDialog.getText(self, "Edit Task", "Name", text=task["name"])
+        name, ok = QInputDialog.getText(self, "Edit Project", "Project name", text=task["name"])
         if not ok or not name.strip():
             return
-        desc, ok = QInputDialog.getMultiLineText(self, "Edit Task", "Goal / authorization boundaries (workflow changes need a new candidate)", task["description"])
+        desc, ok = QInputDialog.getMultiLineText(self, "Edit Project", "What should it do, when is it finished, and what must it not do?", task["description"])
         if ok:
             self.store.execute("UPDATE tasks SET name=?,description=? WHERE id=?", (name, desc, self.task_id))
             # Changed intent invalidates prior review; never silently retain authorization/readiness.
@@ -361,6 +387,8 @@ class MainWindow(QMainWindow):
         return scope
 
     def arm(self, callback):
+        self.arm_generation += 1
+        generation = self.arm_generation
         self.armed = True
         self.state.setText("Paused · starting in 5 seconds; focus selected target · Ctrl+Alt+F8 stops")
         self.overlay.setText("Starting in 5 seconds · focus target · Ctrl+Alt+F8 STOP")
@@ -368,7 +396,7 @@ class MainWindow(QMainWindow):
         self.overlay.show()
         self.showMinimized()
         def begin():
-            if not self.armed:
+            if not self.armed or generation != self.arm_generation:
                 return
             self.armed = False
             self.safe(callback)
@@ -440,6 +468,8 @@ class MainWindow(QMainWindow):
         ident = self.demos.currentData()
         if not ident:
             self.frame_label.clear()
+            if self.shell:
+                self.shell.refresh_recording()
             return
         demo = self.store.rows("SELECT metadata FROM demos WHERE id=?", (ident,))[0]
         ranges = json.loads(demo["metadata"]).get("ignored_ranges", [])
@@ -455,6 +485,8 @@ class MainWindow(QMainWindow):
                 self.timeline.setItem(row, col, QTableWidgetItem(value))
         self.timeline.resizeColumnsToContents()
         self.timeline.setColumnWidth(2, 480)
+        if self.shell:
+            self.shell.refresh_recording()
 
     def show_frame(self):
         row = self.timeline.currentRow()
@@ -545,6 +577,8 @@ class MainWindow(QMainWindow):
         if dialog.exec() == QDialog.DialogCode.Accepted:
             model.save_settings(self.store, {"base_url": url.text().strip(), "model": name.text().strip(), "consent": consent.isChecked(), "local_no_key": local.isChecked()})
             self.refresh_notice()
+            if self.shell:
+                self.shell.refresh_project()
 
     def background(self, fn, message):
         self.worker_busy = True
@@ -562,9 +596,9 @@ class MainWindow(QMainWindow):
         ok, reason = model.availability(self.store)
         if not ok:
             raise ValueError(reason)
-        _, frames = model.prepare_evidence(self.store, task["id"])
+        demos, frames = model.prepare_evidence(self.store, task["id"])
         hostname = __import__("urllib.parse", fromlist=["urlsplit"]).urlsplit(model.settings(self.store)["base_url"]).hostname
-        if self.confirm("Transmit model evidence", f"Send {len(frames)} sampled screenshots plus non-excluded action logs, task notes and answers to {hostname}?\nReview the local timeline first. The configured provider may charge for this call.") != QMessageBox.StandardButton.Yes:
+        if self.confirm("Send teaching evidence to AI?", f"Send {len(frames)} sampled screenshots from {len(demos)} current teaching examples, plus included action logs, project notes and answers, to {hostname}?\nPractice examples and incompatible older recordings are excluded. Review your recordings first. The configured provider may charge for this call.") != QMessageBox.StandardButton.Yes:
             return
         self.background(lambda: model.generate(self.store, task["id"]), "model")
 
@@ -589,14 +623,18 @@ class MainWindow(QMainWindow):
             inputs[name] = value
         practice_demo = None
         if practice:
-            demos = self.store.evidence(self.task_id, "practice")
+            demos = [d for d in self.store.evidence(self.task_id, "practice") if d["metadata"].get("capture_validation") == CAPTURE_VALIDATION_VERSION and d["id"] not in v["workflow"]["sources"]]
             if not demos:
                 raise ValueError("Record a held-out practice example at a different layout first. It will not be sent to the model.")
-            ids = [d["id"] for d in demos]
-            chosen, ok = QInputDialog.getItem(self, "Held-out supervised practice", "Reset the target to the start/layout of this separate example, then choose it", ids, editable=False)
-            if not ok:
-                return
-            practice_demo = chosen
+            if len(demos) == 1:
+                practice_demo = demos[0]["id"]
+            else:
+                from .project_ui import recording_name
+                labels = [recording_name({**d, "metadata": json.dumps(d["metadata"])}) for d in demos]
+                chosen, ok = QInputDialog.getItem(self, "Practice example", "Reset the app to the starting layout of a separate example, then choose it", labels, editable=False)
+                if not ok:
+                    return
+                practice_demo = demos[labels.index(chosen)]["id"]
         authorized = []
         def preview(n):
             effect = v["workflow"]["targets"].get(n.get("target"), {}).get("description", n.get("reason", ""))
@@ -605,9 +643,10 @@ class MainWindow(QMainWindow):
                 effect += " · text: "+re.sub(r"\$\{([^}]+)\}", lambda m: inputs[m[1]], n["text"])
             if n["kind"] == "key":
                 effect += " · keys: "+"+".join(n["keys"])
-            return f"{n['id']}: {n['kind']} → "+effect
-        plan = "\n".join(preview(n) for n in v["workflow"]["nodes"])
-        if self.confirm("Authorize task boundary for this run", f"Window: {scope.title}\nGoal: {v['workflow']['goal']}\nScope: {v['workflow']['scope']}\n\n{plan}\n\nAuthorize these visible interactions for this run only? Review the graph first if any effect is unclear. Stop if the selected app can cause an effect you have not authorized.") != QMessageBox.StandardButton.Yes:
+            return f"{n['kind']} → "+effect
+        plan = "\n".join(f"{i}. "+preview(n) for i, n in enumerate(v["workflow"]["nodes"], 1))
+        practice_note = "Practice: reset the app to the starting state/layout of the selected separate example before continuing.\n" if practice else ""
+        if self.confirm("Allow this project to control the app?", f"Application: {scope.title}\nGoal: {v['workflow']['goal']}\nAllowed scope: {v['workflow']['scope']}\n{practice_note}\n{plan}\n\nAllow these visible actions for this run? The default limit is 120 seconds. Stop if an effect is unclear or not authorized.") != QMessageBox.StandardButton.Yes:
             return
         for node in v["workflow"]["nodes"]:
             if node["consequential"]:
@@ -616,9 +655,11 @@ class MainWindow(QMainWindow):
                 if self.confirm("Authorize one run", f"Authorize consequential step {node['id']}: {node['kind']} on {description}?\nThis applies only to this run, within the selected window. No denies the run.") != QMessageBox.StandardButton.Yes:
                     return
                 authorized.append(node["id"])
-        duration, ok = QInputDialog.getInt(self, "Run boundary", "Maximum duration in seconds, including pauses", 120, 10, 300)
-        if not ok:
-            return
+        duration = 120
+        if self.shell and self.shell.pages.currentWidget() == self.shell.details:
+            duration, ok = QInputDialog.getInt(self, "Run boundary", "Maximum duration in seconds, including pauses", 120, 10, 300)
+            if not ok:
+                return
         control = Control()
         control.health = lambda: self.hotkey.thread.is_alive() and not self.hotkey.error
         runner = Runner(self.store, self.desktop, scope, v, control, inputs, practice_demo, authorized, duration, self.manual_pause.isChecked())
@@ -646,7 +687,20 @@ class MainWindow(QMainWindow):
             self.refresh_library()
 
     def open_lab(self):
-        subprocess.Popen([sys.executable, "-m", "teachdesk.lab"])
+        self.idle()
+        self.windows.setCurrentIndex(0)
+        child = subprocess.Popen([sys.executable, "-m", "teachdesk.lab"])
+        def select(attempt=0):
+            if not self.desktop or child.poll() is not None or self.armed or self.runner or self.recorder or self.windows.currentData() is not None:
+                return
+            self.refresh_windows()
+            for i in range(self.windows.count()):
+                if self.windows.itemData(i).pid == child.pid:
+                    self.windows.setCurrentIndex(i)
+                    return
+            if attempt < 30:
+                QTimer.singleShot(200, lambda: self.safe(lambda: select(attempt+1)))
+        QTimer.singleShot(200, lambda: self.safe(select))
 
     def delete_task(self):
         self.idle()
@@ -656,7 +710,7 @@ class MainWindow(QMainWindow):
             self.task_id = None
             self.versions.clear()
             self.demos.clear()
-            self.title.setText("Create a task to begin")
+            self.title.setText("Open or create a project")
             self.history.clear()
             self.refresh_library()
 
@@ -664,6 +718,8 @@ class MainWindow(QMainWindow):
         if self.emergency.is_set():
             self.emergency.clear()
             self.state.setText("Stopped · emergency requested · releasing held input")
+            if self.control and not self.runner:
+                self.control = None  # A cancelled countdown has no worker to clear it.
         if self.recorder and self.recorder.finished.is_set():
             error = self.recorder.error
             finished_demo = self.recorder.demo
@@ -680,6 +736,9 @@ class MainWindow(QMainWindow):
                     self.timeline.selectRow(row)
                     self.timeline.scrollToTop()
                     break
+            if self.shell:
+                self.shell.open_current()
+                self.shell.steps.setCurrentIndex(1)
             if error:
                 QMessageBox.warning(self, "Recording interrupted", error)
         while not self.messages.empty():
@@ -697,9 +756,14 @@ class MainWindow(QMainWindow):
             else:
                 self.versions.setCurrentIndex(-1)
             self.refresh_library()
+            if self.shell:
+                self.shell.open_current()
+                self.shell.steps.setCurrentIndex(2 if kind == "run" else 1)
             if error:
                 QMessageBox.warning(self, "Operation failed", error)
         if self.armed:
+            if self.shell:
+                self.shell.sync_activity()
             return
         state = "Stopped"
         if self.recorder:
@@ -722,6 +786,8 @@ class MainWindow(QMainWindow):
             self.overlay.show()
         else:
             self.overlay.hide()
+        if self.shell:
+            self.shell.sync_activity()
 
     def closeEvent(self, event):
         self.stop()

@@ -16,6 +16,10 @@ Seven tests are defined: scoped screen capture with injected-event filtering and
 
 The harness uses native input to trigger the real registered emergency chord. It checks cancellation, thread exit, held-input tracking and native A-key state. Core tests additionally check that no new SendInput-equivalent event is accepted after cancellation. Neither test set proves hard real-time latency on all machines, nor does synthetic hotkey activation prove a physical keyboard combination reaches the hook under every driver/layout. Perform the manual physical-hotkey checks below as well.
 
+## Project interface check
+
+Version 0.2.0 should open on Projects. Open an existing project, verify its saved recording in Review with Beginning/End, navigate to Details and back, and close/reopen with the same library. A new project starts at 0% until checks are satisfied. Confirm Stop stays accessible during the start countdown and recording/running; opening a project must never begin capture, a paid AI request, or desktop input. Teaching a practice example from Practice / Run must store a practice-role recording, not add it to the model evidence. The original detailed controls remain available under Settings → Project details for the checks below.
+
 ## Real learning and control protocol
 
 Record actual results, model identifier and Windows/display settings. Do not mark these passed from unit tests or authored fixture graphs.

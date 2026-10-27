@@ -119,6 +119,29 @@ def test_model_transport_contract_and_holdout_isolation(project, monkeypatch):
     assert store.task(task)["active_version"] is None
 
 
+def test_older_recordings_remain_local_when_current_evidence_exists(project, monkeypatch):
+    from PIL import Image
+    store, task, train, held, _, workflow = project
+    old = store.create_demo(task, {"capture_validation": 2})
+    old_frame = store.frame(old, 0, Image.new("RGB", (80, 60), "red"), {})
+    store.event(old, 0, .1, "explanation", {"text": "private old-capture note"})
+    store.execute("UPDATE demos SET status='complete' WHERE id=?", (old,))
+    configure(store, monkeypatch)
+    calls = []
+    def endpoint(request):
+        calls.append(request)
+        body = request.content.decode()
+        assert train in body
+        assert old not in body and old_frame not in body
+        assert held not in body and "private old-capture note" not in body
+        return httpx.Response(200, json={"choices": [{"finish_reason": "stop", "message": {"content": json.dumps(workflow)}}]})
+    original = httpx.Client
+    monkeypatch.setattr(model.httpx, "Client", lambda **kw: original(transport=httpx.MockTransport(endpoint), **kw))
+    candidate = model.generate(store, task)
+    assert calls and store.version(candidate)["workflow"]["sources"] == [train]
+    assert store.rows("SELECT id FROM demos WHERE id=?", (old,)), "Retain history; never silently delete it"
+
+
 def test_model_error_does_not_log_provider_body_or_secret(project, monkeypatch):
     store, task, *_ = project
     configure(store, monkeypatch)
@@ -219,6 +242,8 @@ def test_finished_recording_opens_its_own_timeline(project, monkeypatch, has_fra
         assert window.task_id == task
         assert window.demos.currentData() == finished_demo
         assert window.tabs.currentIndex() == 1
+        assert window.shell.pages.currentWidget() == window.shell.project
+        assert window.shell.steps.currentIndex() == 1
         assert warnings == ([error] if error else [])
         if has_frame:
             assert window.timeline_entries[window.timeline.currentRow()]["kind"] == "frame"

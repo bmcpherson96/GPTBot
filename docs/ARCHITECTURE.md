@@ -4,7 +4,7 @@ Python 3.12 keeps image/perception/model work close to well-supported libraries.
 
 | Component | Source | Responsibility |
 |---|---|---|
-| Desktop UI | `teachdesk/ui.py` | Library, review/questions, timeline, candidate editor, authorization, state overlay, worker lifecycle |
+| Desktop UI | `teachdesk/ui.py`, `teachdesk/project_ui.py` | Library, review/questions, timeline, candidate editor, authorization, state overlay, worker lifecycle |
 | Recording | `teachdesk/recording.py` | Explicit sessions, monotonic event/frame clock, 4fps frames, 20Hz motion samples, holds, privacy defaults, bounded queues |
 | Desktop adapter | `teachdesk/windows.py` | Physical pixels, single-monitor/session/scope checks, HWND-bound Windows Graphics Capture (mss only enumerates monitor geometry), physical-only pynput hooks, SendInput, separate OS hotkey thread |
 | Memory | `teachdesk/storage.py` | Transactional local task/demo/event/frame/version/run/audit storage, persistent answers, version promotion, deletion/invalidation |
@@ -19,6 +19,12 @@ The workflow is a graph, not an input-event replay. Nodes reference named visual
 Train/practice roles are established before capture. Practice evidence is not sent to the model. Versions are immutable documents; answers/review status are separate. Editing saves a new candidate. Promotion checks readiness in a transaction and retains prior versions. Intent edits, evidence exclusions/deletion and practice deletion invalidate relevant eligibility rather than fabricating a successful learning history. A crash marks in-progress sessions interrupted at the next launch. Qt's lock file prevents competing application instances for one store.
 
 The runtime model is used only to construct candidates. Relevant examples are retrieved by task and role, then sampled at action-adjacent and time-spaced frames, with the selection disclosed. This is structured memory/context reuse, **not** fine-tuning or weight training. There is no vector database or cross-task semantic retrieval yet.
+
+## Project-first interface (0.2.0)
+
+`ProjectShell` supplies the home list, New/Open actions, three guided project steps, plain-language graph summary, beginning/end previews and Settings navigation. `MainWindow` remains the action controller; all recording, review, model, run and emergency actions route through its existing methods. The full workspace is retained in a scrollable Details page, so its minimum width no longer forces the main window off screen. No storage migration, readiness threshold slider or new capture backend is introduced. The simple review form saves real version answers/review status; branch destinations, loops, assumptions, completion conditions and inferred rules remain visible in its plan text.
+
+Teaching and practice buttons explicitly assign their evidence roles. The normal practice picker omits incompatible evidence and uses dates, automatically choosing only when a single eligible example exists. Actual-action and consequential-step authorization remain mandatory. Normal mode uses the existing 120-second run bound; advanced mode retains its bounded duration control. The app never starts capture, AI learning or a run merely by opening a project. Current compatible teaching evidence can be learned without deleting older incompatible recordings: those are skipped before request construction, and old-source workflows still fail readiness/preflight.
 
 ## Window image source (0.1.3)
 
