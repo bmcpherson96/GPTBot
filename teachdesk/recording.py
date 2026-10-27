@@ -6,7 +6,7 @@ import threading
 import time
 from dataclasses import asdict
 
-from .windows import InputHooks
+from .windows import CAPTURE_VALIDATION_VERSION, InputHooks, WindowNotReady
 
 
 class Recorder:
@@ -21,12 +21,13 @@ class Recorder:
         self.paused = threading.Event()
         self.queue = queue.Queue(maxsize=10000)
         self.error = None
+        self.capture_reason = "Waiting for first frame"
         self.finished = threading.Event()
         self.held = {}
         self.callback_lock = threading.Lock()
         self.last_move = 0
         self.bytes_written = 0
-        self.demo = store.create_demo(task, {"window": asdict(scope), "display": self.display, "masks": masks, "capture_text": self.capture_text, "fps": 4, "ignored_ranges": [], "expected_outcome": expected_outcome}, role)
+        self.demo = store.create_demo(task, {"window": asdict(scope), "display": self.display, "masks": masks, "capture_text": self.capture_text, "fps": 4, "ignored_ranges": [], "expected_outcome": expected_outcome, "capture_validation": CAPTURE_VALIDATION_VERSION}, role)
         self.hooks = None
         self.thread = threading.Thread(target=self._run, daemon=True)
 
@@ -43,7 +44,10 @@ class Recorder:
         self.thread.start()
 
     def _input(self, kind, data):
-        if self.cancelled.is_set() or self.paused.is_set() or self.desktop.foreground() != self.scope.hwnd:
+        if self.cancelled.is_set() or self.paused.is_set():
+            return
+        observable = getattr(self.desktop, "can_observe_input", lambda scope: self.desktop.foreground() == scope.hwnd)
+        if not observable(self.scope):
             return
         now = time.perf_counter() - self.started
         with self.callback_lock:
@@ -102,7 +106,9 @@ class Recorder:
                 if seq > 50000:
                     raise RuntimeError("Recording event limit reached")
                 if not self.paused.is_set() and not self.cancelled.is_set() and t >= next_frame:
-                    if self.desktop.foreground() == self.scope.hwnd:
+                    try:
+                        if self.desktop.foreground() != self.scope.hwnd:
+                            raise WindowNotReady("Target out of focus")
                         before = time.perf_counter()-self.started
                         image, rect = self.desktop.capture(self.scope, self.display, self.masks)
                         if self.cancelled.is_set() or self.paused.is_set():
@@ -112,6 +118,16 @@ class Recorder:
                         self.bytes_written += (self.store.root/"demos"/self.demo/(fid+".png")).stat().st_size
                         if self.bytes_written > 512*1024*1024:
                             raise RuntimeError("512 MiB demonstration storage limit reached")
+                        if self.capture_reason:
+                            self.store.event(self.demo, seq, after, "capture_resumed", {})
+                            seq += 1
+                        self.capture_reason = None
+                    except WindowNotReady as exc:
+                        reason = str(exc)
+                        if reason != self.capture_reason:
+                            self.store.event(self.demo, seq, time.perf_counter()-self.started, "capture_paused", {"reason": reason})
+                            seq += 1
+                        self.capture_reason = reason
                     next_frame = t+.25
                 self.cancelled.wait(.01)
         except Exception as exc:

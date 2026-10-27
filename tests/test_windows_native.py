@@ -17,7 +17,7 @@ import pytest
 from teachdesk.execution import Cancelled, Control, VisibleInput
 from teachdesk.recording import Recorder
 from teachdesk.storage import Store
-from teachdesk.windows import EmergencyHotkey, WindowsDesktop, enable_dpi_awareness
+from teachdesk.windows import EmergencyHotkey, WindowsDesktop, WindowNotReady, enable_dpi_awareness
 
 pytestmark = pytest.mark.skipif(os.name != "nt" or os.environ.get("TEACHDESK_WINDOWS_TESTS") != "1", reason="Requires explicit opt-in and interactive Windows desktop")
 
@@ -70,6 +70,28 @@ def test_native_capture_and_own_injected_events_filtered(native, tmp_path):
     evidence = store.evidence(task)[0]
     assert len(evidence["frames"]) >= 2
     assert not [e for e in evidence["events"] if e["kind"] == "key"], "Injected events were echoed or physical input occurred"
+    # Frame count alone allowed desktop/background captures to pass. This
+    # controlled fixture has a large known background and a dark status band.
+    import numpy as np
+    from PIL import Image
+    with Image.open(store.root/evidence["frames"][0]["path"]) as image:
+        pixels = np.asarray(image.convert("RGB"), dtype=np.int16)
+    light = np.max(np.abs(pixels-np.array([236, 240, 246])), axis=2) <= 2
+    band = np.max(np.abs(pixels-np.array([22, 40, 63])), axis=2) <= 2
+    assert light.mean() > .55 and band.mean() > .01, "Saved frame is not the expected Lab surface; inspect capture coordinates"
+
+
+def test_native_minimized_window_is_not_captured(native):
+    desktop, scope = native
+    try:
+        desktop.u.ShowWindow(scope.hwnd, 6)
+        until = time.monotonic()+2
+        while not desktop.u.IsIconic(scope.hwnd) and time.monotonic() < until:
+            time.sleep(.02)
+        with pytest.raises(WindowNotReady):
+            desktop.capture(scope)
+    finally:
+        desktop.u.ShowWindow(scope.hwnd, 9)
 
 
 @pytest.mark.parametrize("action", ["movement", "typing", "held_key", "held_button"])

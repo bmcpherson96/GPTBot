@@ -7,6 +7,10 @@ import threading
 import time
 from dataclasses import asdict, dataclass
 from ctypes import wintypes as W
+from functools import wraps
+
+
+CAPTURE_VALIDATION_VERSION = 2
 
 
 @dataclass(frozen=True)
@@ -28,6 +32,25 @@ class UnsupportedDesktop(RuntimeError):
     pass
 
 
+class WindowNotReady(UnsupportedDesktop):
+    """Transient visibility/focus/placement change; no frame may be saved."""
+
+
+def physical_pixels(method):
+    """Use physical pixels on both Qt and worker threads; restore Qt's context."""
+    @wraps(method)
+    def call(self, *args, **kwargs):
+        previous = self.u.SetThreadDpiAwarenessContext(C.c_void_p(-4))
+        if not previous:
+            raise UnsupportedDesktop("Cannot establish physical-pixel DPI context; capture/control blocked")
+        try:
+            return method(self, *args, **kwargs)
+        finally:
+            if not self.u.SetThreadDpiAwarenessContext(previous):
+                raise UnsupportedDesktop("Cannot restore the calling thread's DPI context")
+    return call
+
+
 def mask_image(image, masks):
     from PIL import ImageDraw
     draw = ImageDraw.Draw(image)
@@ -42,6 +65,13 @@ class WindowsDesktop:
             raise UnsupportedDesktop("Capture and control require an unlocked Windows 10/11 desktop")
         self.u = C.WinDLL("user32", use_last_error=True)
         self.k = C.WinDLL("kernel32", use_last_error=True)
+        self.u.SetThreadDpiAwarenessContext.argtypes = [C.c_void_p]
+        self.u.SetThreadDpiAwarenessContext.restype = C.c_void_p
+        self.u.WindowFromPhysicalPoint.argtypes = [W.POINT]
+        self.u.WindowFromPhysicalPoint.restype = W.HWND
+        self.u.GetAncestor.argtypes = [W.HWND, W.UINT]
+        self.u.GetAncestor.restype = W.HWND
+        self.u.GetPhysicalCursorPos.argtypes = [C.POINTER(W.POINT)]
         self.u.GetForegroundWindow.restype = W.HWND
         for name in ("IsWindow", "IsWindowVisible", "IsIconic"):
             getattr(self.u, name).argtypes = [W.HWND]
@@ -82,6 +112,13 @@ class WindowsDesktop:
     def foreground(self):
         return int(self.u.GetForegroundWindow() or 0)
 
+    def can_observe_input(self, scope):
+        # Keep native hook callbacks cheap; do not allocate a screenshot or GDI
+        # context on the low-level hook thread. Visibility can change before
+        # Windows updates the foreground handle during minimize.
+        return bool(self.u.IsWindow(scope.hwnd) and self.u.IsWindowVisible(scope.hwnd)
+                    and not self.u.IsIconic(scope.hwnd) and self.foreground() == scope.hwnd)
+
     def window(self, hwnd):
         pid = W.DWORD()
         self.u.GetWindowThreadProcessId(hwnd, C.byref(pid))
@@ -118,12 +155,14 @@ class WindowsDesktop:
             raise UnsupportedDesktop("Cannot enumerate desktop windows")
         return result
 
+    @physical_pixels
     def geometry(self, hwnd):
         rect = W.RECT()
         if not self.u.GetWindowRect(hwnd, C.byref(rect)):
             raise UnsupportedDesktop("Target window no longer exists")
         return {"left": rect.left, "top": rect.top, "width": rect.right-rect.left, "height": rect.bottom-rect.top}
 
+    @physical_pixels
     def display(self):
         import mss
         with mss.mss() as sct:
@@ -132,13 +171,15 @@ class WindowsDesktop:
             return {**dict(sct.monitors[1]), "dpi": int(self.u.GetDpiForSystem())}
 
     def check(self, scope: Window, display=None):
-        if not self.u.IsWindow(scope.hwnd) or self.u.IsIconic(scope.hwnd) or not self.u.IsWindowVisible(scope.hwnd):
-            raise UnsupportedDesktop("Target closed, hidden or minimized")
+        if not self.u.IsWindow(scope.hwnd):
+            raise UnsupportedDesktop("Target window closed")
+        if self.u.IsIconic(scope.hwnd) or not self.u.IsWindowVisible(scope.hwnd):
+            raise WindowNotReady("Target hidden or minimized")
         current = self.window(scope.hwnd)
         if current.pid != scope.pid or current.executable != scope.executable or current.title != scope.title:
             raise UnsupportedDesktop("Target identity changed")
         if self.foreground() != scope.hwnd:
-            raise UnsupportedDesktop("Target lost foreground focus; refocus it before resuming")
+            raise WindowNotReady("Target lost foreground focus; refocus it before resuming")
         desktop = self.u.OpenInputDesktop(0, False, 1)
         if not desktop:
             raise UnsupportedDesktop("Input desktop is locked or unavailable")
@@ -153,9 +194,15 @@ class WindowsDesktop:
         if display and monitor != display:
             raise UnsupportedDesktop("Display configuration changed")
         if not (monitor["left"] <= rect["left"] and monitor["top"] <= rect["top"] and rect["left"]+rect["width"] <= monitor["left"]+monitor["width"] and rect["top"]+rect["height"] <= monitor["top"]+monitor["height"]):
-            raise UnsupportedDesktop("Target must fit entirely on the single monitor")
+            raise WindowNotReady(f"Target must fit entirely on the single monitor. Window: {rect}; monitor: "
+                                 +str({key: monitor[key] for key in ("left", "top", "width", "height")}))
+        center = W.POINT(rect["left"]+rect["width"]//2, rect["top"]+rect["height"]//2)
+        hit = self.u.WindowFromPhysicalPoint(center)
+        if not hit or int(self.u.GetAncestor(hit, 2) or 0) != scope.hwnd:
+            raise WindowNotReady("Target center is covered or its physical bounds do not match; bring target to front")
         return rect
 
+    @physical_pixels
     def capture(self, scope, display=None, masks=()):
         from PIL import Image
         import mss
@@ -163,15 +210,19 @@ class WindowsDesktop:
         with mss.mss() as sct:
             shot = sct.grab(rect)
             image = Image.frombytes("RGB", shot.size, shot.rgb)
+        # A minimizing window can remain the foreground HWND while the pixels
+        # underneath are exposed. Revalidate all scope conditions before saving.
+        after = self.check(scope, display)
+        if after != rect:
+            raise WindowNotReady("Target moved or resized during capture; frame discarded")
         # normalized rectangles move with window, remain independent of DPI.
         image = mask_image(image, masks)
-        if self.foreground() != scope.hwnd:
-            raise UnsupportedDesktop("Foreground changed during capture; discarded frame")
         return image, rect
 
     def position(self):
         p = W.POINT()
-        self.u.GetCursorPos(C.byref(p))
+        if not self.u.GetPhysicalCursorPos(C.byref(p)):
+            raise UnsupportedDesktop("Cannot read physical cursor position")
         return p.x, p.y
 
     def check_idle(self):

@@ -11,6 +11,7 @@ from .perception import UnknownState, locate, materialize
 from .recording import learn_style
 from .storage import new_id
 from .workflow import ACTIONS, readiness, validate
+from .windows import CAPTURE_VALIDATION_VERSION, WindowNotReady
 
 
 class Cancelled(RuntimeError):
@@ -203,6 +204,8 @@ class Runner:
             practice = {d["id"]: d for d in self.store.evidence(self.version["task"], "practice")}
             if self.practice_demo not in practice or self.practice_demo in self.w["sources"]:
                 raise ValueError("Practice requires a separate completed held-out demonstration")
+            if practice[self.practice_demo]["metadata"].get("capture_validation") != CAPTURE_VALIDATION_VERSION:
+                raise ValueError("Practice example predates capture validation v2; record it again")
             if practice[self.practice_demo]["metadata"]["window"]["executable"] != self.scope.executable:
                 raise ValueError("Practice evidence belongs to a different application")
         elif self.store.task(self.version["task"])["active_version"] != self.version["id"] or not all(c["passed"] for c in readiness(self.store, self.version)):
@@ -211,6 +214,8 @@ class Runner:
         for source in self.w["sources"]:
             if source not in demos or demos[source]["metadata"]["window"]["executable"] != self.scope.executable:
                 raise ValueError("Selected window application differs from the training evidence")
+            if demos[source]["metadata"].get("capture_validation") != CAPTURE_VALIDATION_VERSION:
+                raise ValueError("Training evidence predates capture validation v2; record a fresh demonstration")
             source_title = demos[source]["metadata"]["window"].get("title")
             if source_title and self.scope.title != source_title:
                 raise ValueError("Window title differs from the demonstrated scope; teach a separate candidate")
@@ -233,7 +238,11 @@ class Runner:
     def observe(self):
         self.input.geometry = None
         self.input.gate()
-        image, rect = self.desktop.capture(self.scope, self.display, self.masks)
+        try:
+            image, rect = self.desktop.capture(self.scope, self.display, self.masks)
+        except WindowNotReady as exc:
+            self.control.pause(str(exc))
+            raise Paused(str(exc)) from exc
         self.input.gate()
         self.last_image = image
         self.input.geometry = rect

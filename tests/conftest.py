@@ -31,7 +31,7 @@ def scene(marker, position=(20, 20)):
 def project(tmp_path):
     store = Store(tmp_path)
     task = store.create_task("Fixture", "Deterministic test fixture, not a learned or model-generated task")
-    meta = {"window": {"executable": SCOPE.executable}, "display": DISPLAY, "masks": []}
+    meta = {"window": {"executable": SCOPE.executable}, "display": DISPLAY, "masks": [], "capture_validation": 2}
     train = store.create_demo(task, meta)
     start = store.frame(train, 0, scene(1), {})
     end = store.frame(train, 1, scene(2, (140, 150)), {})

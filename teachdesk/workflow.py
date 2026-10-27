@@ -99,9 +99,12 @@ def readiness(store, version):
         valid = False
     blocked = [q["text"] + (" (answer saved; regenerate to apply it)" if version["answers"].get(q["id"], "").strip() else "") for q in w["questions"] if q["blocking"]]
     demos = {d["id"]: d for d in store.evidence(version["task"], "practice")}
+    from .windows import CAPTURE_VALIDATION_VERSION
+    training = {d["id"]: d for d in store.evidence(version["task"])}
+    valid = valid and all(source in training and training[source]["metadata"].get("capture_validation") == CAPTURE_VALIDATION_VERSION for source in w["sources"])
     runs = store.rows("SELECT * FROM runs WHERE version=? AND outcome IN ('verified','expected_stop')", (vid,))
     import json
-    practice = [r for r in runs if r["practice_demo"] in demos and r["practice_demo"] not in w["sources"]]
+    practice = [r for r in runs if r["practice_demo"] in demos and r["practice_demo"] not in w["sources"] and demos[r["practice_demo"]]["metadata"].get("capture_validation") == CAPTURE_VALIDATION_VERSION]
     completions = [r for r in practice if r["outcome"] == "verified"]
     coverage = {x for r in practice for x in json.loads(r["detail"]).get("coverage", [])}
     required = {n["id"] + ":" + b for n in w["nodes"] if n["kind"] == "branch" for b in ("true", "false")}

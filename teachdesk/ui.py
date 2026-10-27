@@ -22,13 +22,15 @@ from .recording import Recorder
 from .storage import Store, default_home
 from .windows import EmergencyHotkey, WindowsDesktop, enable_dpi_awareness
 from .workflow import readiness, validate
+from . import __version__
+from .windows import CAPTURE_VALIDATION_VERSION
 
 
 class MainWindow(QMainWindow):
     def __init__(self, store):
         super().__init__()
         self.store = store
-        self.setWindowTitle("TeachDesk · demonstration workspace")
+        self.setWindowTitle(f"TeachDesk {__version__} · demonstration workspace")
         self.resize(1360, 920)
         self.task_id = None
         self.recorder = self.runner = self.control = None
@@ -273,7 +275,8 @@ class MainWindow(QMainWindow):
         old_demo = self.demos.currentData()
         self.demos.clear()
         for d in self.store.rows("SELECT * FROM demos WHERE task=? ORDER BY created DESC", (self.task_id,)):
-            self.demos.addItem(f"{d['id'][:8]} · {d['role']} · {d['status']}", d["id"])
+            legacy = " · re-record after update" if json.loads(d["metadata"]).get("capture_validation") != CAPTURE_VALIDATION_VERSION else ""
+            self.demos.addItem(f"{d['id'][:8]} · {d['role']} · {d['status']}"+legacy, d["id"])
         idx = self.demos.findData(old_demo)
         self.demos.setCurrentIndex(max(0, idx))
         self.demos.blockSignals(False)
@@ -689,7 +692,14 @@ class MainWindow(QMainWindow):
             return
         state = "Stopped"
         if self.recorder:
-            state = "Paused" if self.recorder.paused.is_set() else "Recording" if self.desktop.foreground() == self.recorder.scope.hwnd else "Paused · target out of focus"
+            if self.recorder.paused.is_set():
+                state = "Paused"
+            elif self.desktop.foreground() != self.recorder.scope.hwnd:
+                state = "Paused · target out of focus"
+            elif self.recorder.capture_reason:
+                state = "Paused · "+self.recorder.capture_reason
+            else:
+                state = "Recording"
         elif self.runner:
             state = "Paused" if self.control.paused.is_set() else self.runner.state
         elif self.worker_busy:

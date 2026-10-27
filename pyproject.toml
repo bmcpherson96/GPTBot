@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "teachdesk"
-version = "0.1.0"
+version = "0.1.1"
 description = "Local demonstration learning and visible Windows desktop control"
 requires-python = ">=3.12"
 dependencies = [

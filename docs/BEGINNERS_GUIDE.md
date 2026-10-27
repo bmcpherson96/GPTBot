@@ -2,7 +2,7 @@
 
 This guide takes you from downloading the project to teaching and testing one small task. Start with the included **Practice Lab**, which is a harmless local application. You do not need your game for these steps.
 
-**Current status:** 49 core/UI tests passed on Linux. Five Windows-specific tests were supplied but not run there. A real model learning session has not been verified yet because that environment had no model key. Your first Windows tests are part of validating this prototype, not just installing a finished product.
+**Current status:** the original 49 core/UI tests also passed on the user's Windows PC. Version 0.1.1 addresses a window-transition capture defect and passes 65 core/regression tests on Linux; six native Windows tests remain pending. The changed capture path and a real model learning session still need verification on Windows. Your tests are part of validating this prototype, not just installing a finished product.
 
 ## 1. What we built, in plain English
 
@@ -31,9 +31,9 @@ The current runner follows the reviewed graph; it does not continually ask a mod
 
 ## 2. Get the files onto your Windows PC
 
-1. Download `TeachDesk-0.1.0-source.zip` from the conversation.
+1. Download the latest TeachDesk source ZIP from the GitHub `teachdesk-prototype` branch linked in the conversation. Version 0.1.1 contains `Launch TeachDesk.cmd`.
 2. Right-click it and choose **Extract All**. Do not launch from inside the ZIP.
-3. Open the extracted **TeachDesk** folder. You should see `README.md`, `pyproject.toml`, and the `scripts` and `teachdesk` folders. That is your **project folder**.
+3. Open the extracted project folder (GitHub names it `GPTBot-teachdesk-prototype`). You should see `README.md`, `pyproject.toml`, `Launch TeachDesk.cmd`, and the `scripts` and `teachdesk` folders. That is your **project folder**.
 4. Install **64-bit Python 3.12** from [python.org](https://www.python.org/downloads/windows/), including the Python launcher if offered. Other Python versions are not the documented starting configuration.
 5. Open PowerShell in the project folder: in File Explorer, click the address bar, type `powershell`, and press Enter.
 6. Check Python:
@@ -48,6 +48,12 @@ For the first test, use Windows 10/11 with **one enabled monitor**, leave scalin
 
 ## 3. Install and open TeachDesk
 
+For the simplest route, **double-click `Launch TeachDesk.cmd`** in your extracted project folder. It prepares the environment on first use and opens the app. No PowerShell commands or activation scripts are needed for this route. Keep the console open. If it reports an error, preserve the output. Check that the app title says **TeachDesk 0.1.1**.
+
+When updating, first close both TeachDesk and its Lab. Extract the new download and open its launcher. Task data lives outside the program folder, so the same Windows account normally sees its existing library. Old recordings are labeled **re-record after update** and cannot be sent to the model. Delete the affected demonstration through the UI, or create a new task and record a clean example. Your previous data is not deleted automatically.
+
+The manual setup and test commands below remain available for troubleshooting and validation.
+
 In that PowerShell window, run:
 
 ```powershell
@@ -56,7 +62,7 @@ In that PowerShell window, run:
 
 This creates an isolated Python environment inside `.venv`, installs dependencies, checks them, and runs the core tests. It needs Internet access to download packages. The installation does not need a model key and does not make paid model calls.
 
-**Expected result:** tests pass, with the five interactive Windows tests skipped unless you explicitly enabled them. A skipped native test has not passed; the next section explains how to run those checks.
+**Expected result:** tests pass, with the six interactive Windows tests skipped unless you explicitly enabled them. A skipped native test has not passed; the next section explains how to run those checks.
 
 If PowerShell says script execution is disabled, use these equivalent commands instead of changing your machine’s security policy:
 
@@ -99,7 +105,7 @@ Before learning anything, run the supplied native diagnostics:
    ```
 
 3. The tests open disposable lab windows and send **visible** mouse/keyboard input. Keep your hands off during the test. If Windows refuses to focus a lab, click it during the focus window and retry.
-4. Expect **five passing tests**: capture/filtering and emergency cancellation during movement, typing, a held key, and a held mouse button. These tests trigger the registered hotkey using native input; you should additionally check your physical keyboard combination later.
+4. Expect **six passing tests**: capture/filtering with a check for the Lab's visible colors, rejection of minimized-window capture, and emergency cancellation during movement, typing, a held key, and a held mouse button. These tests trigger the registered hotkey using native input; you should additionally check your physical keyboard combination later.
 
 If a check fails, save the complete output and identify which test failed. Do not proceed to automated game control. A successful diagnostic checks Windows plumbing, not model learning or game competence.
 
@@ -136,6 +142,8 @@ The task you will teach is: select Oak, type `oak`, then finish.
 8. Return to TeachDesk and click **Stop**.
 
 The pauses help the prototype’s sampled screenshots capture each result. It samples around four frames per second rather than saving continuous video.
+
+Switching away or minimizing the Lab should pause teaching capture and discard a frame affected by the transition, retaining the previous valid frame. Returning the Lab to the foreground should resume capture. You can use the existing **Pause** button before switching, and **Stop** to finish. A `complete` recording label means the session was saved normally; inspect its previews to verify the task's starting and completion states were actually captured.
 
 ### Check what was recorded
 
@@ -249,6 +257,8 @@ While paused during an action, complete/correct that step manually, then click *
 | Model HTTP 429 | Check account quota, credit, and rate limits. A retry may incur another charge. |
 | Model rejects images/JSON or produces invalid crops | Confirm model capabilities; review the exact error and source screenshots. This prototype can need a clearer demonstration or candidate repair. |
 | No frames or missing actions | Confirm the lab was selected and foreground during recording, and that the demonstration completed normally. Ordinary text is redacted unless opted in. |
+| A preview shows desktop wallpaper or TeachDesk rather than the Lab | Do not send that evidence to a model. Use version 0.1.1, record a fresh demonstration, and inspect both the first and final frames. If it recurs, retain the error/geometry details and report it; native capture is still under validation. |
+| A demonstration says re-record after update | It predates capture validation v2. Delete that demonstration or use a new task, then record again. |
 | Target lost foreground focus | Focus the selected lab during the countdown; do not click TeachDesk during a run unless intentionally intervening. |
 | Target is missing or ambiguous | Reset to the expected state; keep the same scale/theme; remove duplicate-looking targets. Do not reduce verification just to get a pass. |
 | Practice says the layout is wrong | Reset without shuffling after the held-out recording, or record a new held-out example of the current layout. |

@@ -11,6 +11,7 @@ import httpx
 from PIL import Image
 
 from .workflow import validate
+from .windows import CAPTURE_VALIDATION_VERSION
 
 
 SYSTEM = '''You produce conservative, executable visual desktop workflow graphs from explicitly recorded demonstrations.
@@ -91,6 +92,8 @@ def prepare_evidence(store, task):
         raise ValueError("Prototype context supports up to eight training demonstrations; archive/delete irrelevant examples first")
     selected, summaries = [], []
     for demo in demos:
+        if demo["metadata"].get("capture_validation") != CAPTURE_VALIDATION_VERSION:
+            raise ValueError("A training recording predates capture validation v2. Delete that recording or use a new task, and record again before model review. No evidence was transmitted.")
         frames = demo["frames"]
         if not frames:
             raise ValueError("A selected demonstration has no included screenshots")
