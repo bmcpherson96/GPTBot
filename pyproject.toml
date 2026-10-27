@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "teachdesk"
+version = "0.1.0"
+description = "Local demonstration learning and visible Windows desktop control"
+requires-python = ">=3.12"
+dependencies = [
+  "PySide6-Essentials==6.12.0", "mss==10.2.0", "pynput==1.8.2; sys_platform == 'win32'",
+  "opencv-python-headless==5.0.0.93", "numpy==2.5.4", "Pillow==13.0.0", "httpx==0.28.1"
+]
+
+[project.scripts]
+teachdesk = "teachdesk.ui:main"
+teachdesk-lab = "teachdesk.lab:main"
+
+[tool.setuptools.packages.find]
+include = ["teachdesk*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
